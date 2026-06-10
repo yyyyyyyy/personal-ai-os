@@ -12,6 +12,70 @@
 
 ---
 
+## Governance Charter
+
+Personal AI Runtime exists to govern personal agent behavior.
+
+It does not exist to provide features.
+
+Features are Apps. Governance is Runtime.
+
+A change requires RFC only if it changes the MUST semantics of a Runtime Primitive.
+
+**Maintainer lint:** Does this change require modifying a Primitive's MUST definition? If no → App / Capability / Projection / Policy. If yes → RFC.
+
+**Facts vs interpretation:** Runtime provides facts (`query_state`, `read_events`). Apps provide interpretation (briefs, reviews, dashboards, scores).
+
+Enforcement: `backend/scripts/check_boundary.py` (CI) — governed projection reads/writes outside `kernel/` fail the build.
+
+---
+
+## W5 — Runtime Closure Validation (v1)
+
+W5 is not a debt sprint. It validates **Runtime Closure**: the Runtime is closed for v1 — Apps need not bypass it, and it need not grow new read/write ABI for validated product scenarios.
+
+| Closure path | Guard | Status |
+|--------------|-------|--------|
+| Write: Event → State | `verify_rebuild.py` | ✓ |
+| Read: State → App | Read Surface v1 (`query_state`, `read_events`) | ✓ PASS |
+| Boundary: App ↛ governed DB | `check_boundary.py` | ✓ Debt 0 |
+| ABI surface | No expansion during validation | ✓ 0 new ABI |
+
+**Sufficiency** = current apps work. **Closure** = current apps work *and* new apps should default to the same ABI without `query_*()` proliferation.
+
+**Scope** (validated alongside Closure): Runtime exposes **facts** (projections, events); Apps own **interpretation** (briefs, stats, insights, summaries). Product semantics must not migrate into Kernel as `query_review()` / `query_dashboard()` / Knowledge primitives.
+
+| Layer | Provides | Must not provide |
+|-------|----------|------------------|
+| Runtime | Facts via `query_state`, `read_events`, capabilities | Product semantics, aggregation meaning, "what to remind today" |
+| App | Interpretation, UI, stats, trends, narratives | Direct governed DB access |
+
+**W6+ scope test:** Can Knowledge / Mail / proactive layer ship without `query_knowledge()`, `query_chunks()`, or a Knowledge Primitive? If yes — Closure and Scope hold. If no — Scope is drifting even if Closure holds.
+
+Validated in-repo (2026-06-10):
+
+| App | Path | Read ABI used | New ABI added |
+|-----|------|---------------|---------------|
+| Morning Brief | `product/morning_brief.py` | `query_state("goals", ...)` | None |
+| Review | `core/review_engine.py` | `query_state` + `read_events` + `to_legacy_dict` | None |
+| Dashboard | `core/telemetry/telemetry.py` | `query_state("memories" \| "tasks", ...)` + App aggregation | None |
+| Deadline Alert | `core/scheduler.py` | `query_state("goals", deadline_within_days=...)` | None |
+
+**Conclusion:** W5 validated **Runtime Closure** and **Runtime Scope** for v1.
+
+- **Closure:** product apps implementable without expanding Runtime ABI (`query_state` + `read_events` closed for validated apps).
+- **Scope:** product semantics stay in Apps; Runtime exposes facts, not interpretations.
+
+Runtime Read Surface v1 = `query_state()` + `read_events()`. Aggregation, sorting, narratives, and metrics belong in Apps.
+
+**ABI guard question:** Before adding `query_*_stats()` or similar — why did Brief / Review / Dashboard / Deadline Alert not require it?
+
+**W6+ question:** Is Closure *stable*? (Knowledge, Mail, proactive layer, coding agent — do they still fit without new ABI?)
+
+**Boundary debt:** 0 (`make boundary --strict` passes).
+
+---
+
 ## 0. 第一性原理：Runtime 的本质是「边界」，不是「状态」
 
 很多 AI 项目有了 `Memory + Agent + Tools + SQLite` 就自称 Runtime。**这是错的。**

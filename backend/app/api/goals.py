@@ -1,7 +1,7 @@
 """Goals & Actions API — manage goals and their sub-actions."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 
@@ -21,7 +21,7 @@ async def create_goal(body: dict):
         raise HTTPException(status_code=400, detail="Title is required")
 
     goal_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
 
     description = body.get("description", "")
     importance = float(body.get("importance", 0.5))
@@ -138,7 +138,7 @@ async def create_action(goal_id: str, body: dict):
         raise HTTPException(status_code=404, detail="Goal not found")
 
     action_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
 
     kernel.emit_event(
         type="ActionCreated",
@@ -168,7 +168,7 @@ async def update_action(goal_id: str, action_id: str, body: dict):
     if status:
         payload["status"] = status
         if status == "completed":
-            payload["completed_at"] = datetime.utcnow().isoformat()
+            payload["completed_at"] = datetime.now(UTC).isoformat()
 
     if title:
         payload["title"] = title
@@ -213,7 +213,7 @@ def _goal_priority_score(goal: dict) -> float:
         activity_dt = datetime.fromisoformat(activity_at)
     except ValueError:
         return importance * urgency
-    days_stale = max((datetime.utcnow() - activity_dt).total_seconds() / 86400.0, 0.0)
+    days_stale = max((datetime.now(UTC) - activity_dt).total_seconds() / 86400.0, 0.0)
     return importance * urgency * days_stale
 
 

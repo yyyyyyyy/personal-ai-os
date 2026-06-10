@@ -13,6 +13,11 @@ from app.core.agents.context_engine import context_engine
 from app.core.agents.conversation import ConversationManager
 from app.core.agents.llm_router import llm_router
 from app.core.agents.memory_extractor import memory_extractor
+from app.core.agents.tool_postprocess import (
+    build_prompt_hints,
+    canned_summary,
+    compact_for_llm,
+)
 from app.core.runtime.kernel_instance import kernel
 from app.core.telemetry.event_recorder import Event, event_recorder
 from app.core.telemetry.telemetry import LLMCallRecord, telemetry
@@ -53,6 +58,7 @@ class Brain:
 
         # Step 3: Run the LLM → tool call loop
         full_content = ""
+        canned_response_done = False
         tool_iterations = 0
         loop_start = time.time()
 
@@ -115,7 +121,7 @@ class Brain:
 
             # Record LLM call
             llm_latency = (time.time() - llm_start) * 1000
-            prompt_tokens = sum(len(msg.get("content", "")) // 4 for msg in messages)
+            prompt_tokens = sum(len(msg.get("content") or "") // 4 for msg in messages)
             completion_tokens = len(assistant_content) // 4
             estimated_cost = (prompt_tokens * 0.000001 + completion_tokens * 0.000002)  # generic estimate
             telemetry.record_llm_call(LLMCallRecord(
@@ -130,6 +136,10 @@ class Brain:
             # If LLM returned a text response without tool calls
             if not tool_calls_data:
                 full_content = assistant_content
+                if not full_content.strip():
+                    full_content = await self._complete_text_only(messages, user_message)
+                    if full_content:
+                        yield {"type": "text_delta", "content": full_content}
                 break
 
             # Process tool calls
@@ -155,6 +165,8 @@ class Brain:
                 assistant_content or "",
                 tool_calls=tc_for_msg if tool_calls_data else None,
             )
+
+            iteration_tool_results: list[dict] = []
 
             # Now save tool results
             for tc in tool_calls_data:
@@ -202,27 +214,52 @@ class Brain:
                         "content": tool_result,
                     }
 
-                # Add tool result to messages
+                iteration_tool_results.append({
+                    "tool_name": tool_name,
+                    "tool_call_id": tc["id"],
+                    "content": tool_result,
+                })
+
+                # Add tool result to messages (compact large payloads for LLM context)
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
-                    "content": tool_result,
+                    "content": compact_for_llm(tool_name, tool_result),
                 })
 
                 # Persist tool result
                 conversation.save_tool_result(tool_result, tc["id"])
 
+            summary = canned_summary(tool_calls_data, iteration_tool_results)
+            if summary:
+                full_content = summary
+                canned_response_done = True
+                yield {"type": "text_delta", "content": full_content}
+                break
+
             tool_iterations += 1
             if tool_iterations >= settings.max_tool_iterations:
-                # Save any text content the LLM produced in the final iteration
                 if assistant_content:
-                    conversation.save_assistant_message(assistant_content)
                     full_content = assistant_content
-                yield {"type": "error", "content": "达到了最大工具调用次数。已根据当前结果生成回复。"}
+                    yield {"type": "text_delta", "content": assistant_content}
+                else:
+                    synthesized = await self._synthesize_from_tool_results(messages)
+                    if synthesized:
+                        full_content = synthesized
+                        yield {"type": "text_delta", "content": synthesized}
+                if full_content:
+                    note = "\n\n（已达工具调用次数上限，以上为根据已收集信息生成的回复。）"
+                    full_content += note
+                    yield {"type": "text_delta", "content": note}
+                else:
+                    yield {
+                        "type": "error",
+                        "content": "达到了最大工具调用次数，且无法根据已有结果生成回复。",
+                    }
                 break
 
         # Step 4: Save final assistant response and record conversation event
-        if full_content:
+        if full_content and not canned_response_done:
             conversation.save_assistant_message(full_content)
 
         event_recorder.record(Event(
@@ -304,13 +341,65 @@ class Brain:
                 ))
         raise last_error or RuntimeError("No LLM provider available")
 
+    async def _synthesize_from_tool_results(self, messages: list[dict]) -> str:
+        """Final text-only pass when the tool loop hits its iteration cap."""
+        synth_messages = list(messages)
+        synth_messages.append({
+            "role": "user",
+            "content": (
+                "已达到工具调用次数上限。请仅根据上述对话与工具返回的结果，"
+                "用中文直接回答用户最初的问题，不要再调用任何工具。"
+            ),
+        })
+        try:
+            response = await self.client.chat.completions.create(  # type: ignore[call-overload]
+                model=self.provider.model,
+                messages=synth_messages,
+                temperature=settings.llm_temperature,
+                max_tokens=settings.llm_max_tokens,
+            )
+            return (response.choices[0].message.content or "").strip()
+        except Exception:
+            return ""
+
+    async def _complete_text_only(self, messages: list[dict], user_message: str) -> str:
+        """Retry once without tools when the model returns an empty completion."""
+        retry_messages = list(messages)
+        retry_messages.append({
+            "role": "user",
+            "content": (
+                f"{user_message}\n\n"
+                "(请直接文字回复。)"
+            ),
+        })
+        try:
+            response = await self.client.chat.completions.create(  # type: ignore[call-overload]
+                model=self.provider.model,
+                messages=retry_messages,
+                temperature=settings.llm_temperature,
+                max_tokens=settings.llm_max_tokens,
+            )
+            return (response.choices[0].message.content or "").strip()
+        except Exception:
+            return "抱歉，我暂时无法生成回复，请再试一次。"
+
     def _build_messages(self, conversation: ConversationManager, user_message: str) -> list[dict]:
         """Build the messages array for the LLM, including system prompt, context, and history."""
         # Build rich context from Runtime
         ctx = context_engine.build_context(user_message)
         context_appendix = ctx.to_system_prompt_appendix()
 
+        tool_defs = kernel.list_capability_definitions()
+        available_tools = {
+            t["function"]["name"]
+            for t in tool_defs
+            if t.get("function", {}).get("name")
+        }
+        prompt_hints = build_prompt_hints(available_tools)
+
         system_content = SYSTEM_PROMPT
+        if prompt_hints:
+            system_content += f"\n\n---\n{prompt_hints}"
         if context_appendix:
             system_content += f"\n\n---\n当前用户状态:\n{context_appendix}"
 
@@ -364,10 +453,19 @@ class Brain:
         for idx, msg in enumerate(tagged):
             if msg["role"] == "tool":
                 if keep_tool_result.get(idx):
+                    tool_content = msg["content"] or ""
+                    tool_name_guess = ""
+                    for tc in tagged:
+                        if tc.get("role") == "assistant" and tc.get("tool_calls"):
+                            for tcall in tc["tool_calls"]:
+                                if tcall.get("id") == msg.get("tool_call_id"):
+                                    tool_name_guess = tcall.get("function", {}).get("name", "")
+                    if tool_name_guess:
+                        tool_content = compact_for_llm(tool_name_guess, tool_content)
                     messages.append({
                         "role": "tool",
                         "tool_call_id": msg["tool_call_id"],
-                        "content": msg["content"],
+                        "content": tool_content,
                     })
                 continue
 

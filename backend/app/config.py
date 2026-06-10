@@ -39,7 +39,7 @@ class Settings:
 
     # Conversation settings
     max_recent_messages: int = 50  # sliding window size
-    max_tool_iterations: int = 5
+    max_tool_iterations: int = int(os.getenv("MAX_TOOL_ITERATIONS", "10"))
     tool_timeout_seconds: int = 30
     total_tool_loop_timeout: int = 120
 

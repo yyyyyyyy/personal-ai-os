@@ -9,11 +9,12 @@ Handles:
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from app.core.runtime.kernel_instance import kernel
 from app.store.database import db
 
 _scheduler = BackgroundScheduler()
@@ -67,6 +68,15 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    # Belief reflection: every day at 21:30 (after daily review)
+    _scheduler.add_job(
+        _run_belief_reflection,
+        CronTrigger(hour=21, minute=30),
+        id="belief_reflection",
+        name="信念反思",
+        replace_existing=True,
+    )
+
     # Sync scheduled tasks to database
     _sync_schedules_to_db()
 
@@ -93,7 +103,7 @@ def _sync_schedules_to_db():
                 conn.execute(
                     "INSERT INTO schedules (id, name, cron_expr, task_type, enabled, created_at) "
                     "VALUES (?, ?, ?, ?, 1, ?)",
-                    (schedule_id, job.name, str(job.trigger), job.id, datetime.utcnow().isoformat()),
+                    (schedule_id, job.name, str(job.trigger), job.id, datetime.now(UTC).isoformat()),
                 )
 
 
@@ -144,21 +154,16 @@ def _run_monthly_review():
 def _run_deadline_alert():
     """Check for imminent deadlines and create alerts."""
     try:
-        today_utc = datetime.utcnow().date()
+        today_utc = datetime.now(UTC).date()
         target_dates = {today_utc + timedelta(days=offset) for offset in (1, 3)}
 
-        with db.get_db() as conn:
-            deadlines = conn.execute(
-                """SELECT * FROM goals WHERE status = 'active'
-                   AND deadline IS NOT NULL
-                   AND date(deadline) IN (date('now', '+1 days'), date('now', '+3 days'))
-                   ORDER BY deadline ASC"""
-            ).fetchall()
-
-        # Filter in Python with UTC dates for consistency when date() parsing differs
+        candidates = kernel.query_state(
+            "goals", status="active", deadline_within_days=3, limit=500
+        )
         filtered = []
-        for goal in deadlines:
-            goal = dict(goal)
+        for goal in candidates:
+            if not goal.get("deadline"):
+                continue
             try:
                 deadline_date = datetime.fromisoformat(goal["deadline"]).date()
             except ValueError:
@@ -169,7 +174,7 @@ def _run_deadline_alert():
 
         for goal in deadlines:
             goal = dict(goal)
-            delta = datetime.fromisoformat(goal["deadline"]) - datetime.utcnow()
+            delta = datetime.fromisoformat(goal["deadline"]) - datetime.now(UTC)
             days_left = delta.days
 
             notification_id = str(uuid.uuid4())
@@ -180,7 +185,7 @@ def _run_deadline_alert():
                 conn.execute(
                     "INSERT INTO notifications (id, type, title, content, created_at) "
                     "VALUES (?, 'alert', ?, ?, ?)",
-                    (notification_id, title, content, datetime.utcnow().isoformat()),
+                    (notification_id, title, content, datetime.now(UTC).isoformat()),
                 )
 
         _update_last_run("deadline_alert")
@@ -188,10 +193,49 @@ def _run_deadline_alert():
         print(f"Deadline alert error: {e}")
 
 
+def _run_belief_reflection():
+    """Execute belief reflection: patterns → LLM → BeliefFormed.
+
+    Key constraint: consumes projections (patterns, goals, memories) only.
+    Never reads raw events.
+    """
+    try:
+        from app.core.belief.belief_engine import ReflectionContext, belief_engine
+        from app.core.runtime.kernel_instance import kernel
+
+        patterns = kernel.query_state("patterns", window_days=14, limit=20)
+        goals = kernel.query_state("goals", status="active", limit=10)
+        memories = kernel.query_state("memories", confidence_gt=0.3, limit=20)
+
+        if not patterns:
+            print("Belief reflection skipped: no patterns available")
+            return
+
+        ctx = ReflectionContext(
+            patterns=patterns,
+            goals=goals,
+            memories=memories,
+        )
+
+        # Run synchronously in the scheduler thread (asyncio handles the await)
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            beliefs = loop.run_until_complete(belief_engine.reflect(ctx))
+        finally:
+            loop.close()
+
+        print(f"Belief reflection produced {len(beliefs)} beliefs")
+        _update_last_run("belief_reflection")
+        return beliefs
+    except Exception as e:
+        print(f"Belief reflection error: {e}")
+
+
 def _update_last_run(task_name: str):
     """Update the last_run_at timestamp for a schedule."""
     with db.get_db() as conn:
         conn.execute(
             "UPDATE schedules SET last_run_at = ? WHERE name = ?",
-            (datetime.utcnow().isoformat(), task_name),
+            (datetime.now(UTC).isoformat(), task_name),
         )

@@ -3,7 +3,7 @@
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import settings
@@ -201,6 +201,30 @@ CREATE TABLE IF NOT EXISTS user_profile (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(category)
 );
+
+CREATE TABLE IF NOT EXISTS patterns (
+    id TEXT PRIMARY KEY,
+    pattern_type TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    window_days INTEGER NOT NULL,
+    statistics TEXT NOT NULL,
+    evidence_chain TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS inbox_emails (
+    id TEXT PRIMARY KEY,
+    sender TEXT,
+    subject TEXT,
+    preview TEXT,
+    received_at DATETIME,
+    category TEXT,
+    importance REAL DEFAULT 0.5,
+    reason TEXT,
+    notified INTEGER DEFAULT 0,
+    digested INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -237,7 +261,7 @@ class Database:
 
     def create_conversation(self, title: str | None = None) -> dict:
         conv_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         with self.get_db() as conn:
             conn.execute(
                 "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
@@ -261,7 +285,7 @@ class Database:
         return [dict(r) for r in rows]
 
     def update_conversation(self, conv_id: str, title: str | None = None, summary: str | None = None):
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         fields = ["updated_at = ?"]
         params = [now]
         if title is not None:
@@ -293,7 +317,7 @@ class Database:
         tool_call_id: str | None = None,
     ) -> dict:
         msg_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         with self.get_db() as conn:
             conn.execute(
                 "INSERT INTO messages (id, conversation_id, role, content, tool_calls, tool_call_id, created_at) "

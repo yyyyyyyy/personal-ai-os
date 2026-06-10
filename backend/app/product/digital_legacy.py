@@ -3,7 +3,7 @@
 import json
 import shutil
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import settings
@@ -21,7 +21,7 @@ class DigitalLegacy:
         return self.export_all()
 
     def export_all(self) -> dict:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         persona_id = str(uuid.uuid4())
 
         profile = user_profile.get_profile()

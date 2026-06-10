@@ -5,7 +5,7 @@ Injected into Planner's system prompt on every call.
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.core.runtime.kernel_instance import kernel
 from app.core.runtime.legacy_event_adapter import to_legacy_dict
@@ -28,7 +28,7 @@ class WorldModel:
 
     def build_snapshot(self) -> dict:
         """Build the current world state snapshot."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         thirty_days_ago = (now - timedelta(days=30)).isoformat()
 
         active_goals = kernel.query_state("goals", status="active", limit=500)

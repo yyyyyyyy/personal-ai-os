@@ -6,7 +6,7 @@ Events feed into the Memory Engine (for memory extraction) and Review Engine (fo
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from app.activity_log import log_activity
@@ -29,7 +29,7 @@ class EventRecorder:
     def record(self, event: Event) -> str:
         """Record an event and return its ID."""
         event_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
 
         with db.get_db() as conn:
             conn.execute(

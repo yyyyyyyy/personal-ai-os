@@ -3,7 +3,7 @@
 Uses time, recent events, and calendar context to pre-fetch tools/memories.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.core.runtime.kernel_instance import kernel
 
@@ -27,7 +27,7 @@ class IntentPredictor:
 
     def predict(self) -> dict:
         """Predict the most likely user intent right now."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         hour = now.hour
         weekday = now.strftime("%A")
 

@@ -6,9 +6,12 @@ detects problems, and suggests adjustments. Reviews complete the Goalâ†’Actionâ†
 
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.core.agents.memory_engine import memory_engine
+from app.core.runtime.kernel_instance import kernel
+from app.core.runtime.legacy_event_adapter import to_legacy_dict
+from app.core.telemetry.event_recorder import event_recorder
 from app.store.database import db
 
 
@@ -32,7 +35,7 @@ class ReviewEngine:
                 "INSERT INTO reviews (id, type, period_start, period_end, content, key_insights, created_at) "
                 "VALUES (?, 'daily', ?, ?, ?, ?, ?)",
                 (review_id, date, date, content, json.dumps(self._extract_insights(content)),
-                 datetime.utcnow().isoformat()),
+                 datetime.now(UTC).isoformat()),
             )
 
         # Store key findings as memories
@@ -66,7 +69,7 @@ class ReviewEngine:
                 "INSERT INTO reviews (id, type, period_start, period_end, content, key_insights, created_at) "
                 "VALUES (?, 'weekly', ?, ?, ?, ?, ?)",
                 (review_id, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"),
-                 content, json.dumps(self._extract_insights(content)), datetime.utcnow().isoformat()),
+                 content, json.dumps(self._extract_insights(content)), datetime.now(UTC).isoformat()),
             )
 
         return review_id
@@ -91,49 +94,57 @@ class ReviewEngine:
                 "INSERT INTO reviews (id, type, period_start, period_end, content, key_insights, created_at) "
                 "VALUES (?, 'monthly', ?, ?, ?, ?, ?)",
                 (review_id, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"),
-                 content, json.dumps(self._extract_insights(content)), datetime.utcnow().isoformat()),
+                 content, json.dumps(self._extract_insights(content)), datetime.now(UTC).isoformat()),
             )
 
         return review_id
 
     def _get_events_for_date(self, date: str) -> list[dict]:
-        with db.get_db() as conn:
-            rows = conn.execute(
-                "SELECT * FROM events WHERE date(timestamp) = ? ORDER BY timestamp ASC",
-                (date,),
-            ).fetchall()
-        return [dict(r) for r in rows]
+        return self._get_events_for_period(date, date)
 
     def _get_events_for_period(self, start: str, end: str) -> list[dict]:
-        with db.get_db() as conn:
-            rows = conn.execute(
-                "SELECT * FROM events WHERE date(timestamp) BETWEEN ? AND ? ORDER BY timestamp ASC",
-                (start, end),
-            ).fetchall()
-        return [dict(r) for r in rows]
+        """Governed events via kernel.read_events; application events via event_recorder."""
+        since_ts = f"{start}T00:00:00"
+        end_ts = f"{end}T23:59:59.999999"
+
+        kernel_rows = [
+            to_legacy_dict(e)
+            for e in kernel.read_events(since_ts=since_ts, limit=5000, order="asc")
+            if (e.ts or "") <= end_ts
+        ]
+
+        span_days = max(
+            (datetime.fromisoformat(end) - datetime.fromisoformat(start)).days + 1,
+            1,
+        )
+        app_rows = event_recorder.get_recent_events(days=span_days + 1, limit=5000)
+        app_rows = [
+            row for row in app_rows
+            if start <= (row.get("timestamp") or "")[:10] <= end
+        ]
+
+        merged = kernel_rows + app_rows
+        merged.sort(key=lambda r: r.get("timestamp", ""))
+        return merged
 
     def _get_active_goals(self) -> list[dict]:
-        with db.get_db() as conn:
-            rows = conn.execute(
-                "SELECT * FROM goals WHERE status = 'active' ORDER BY importance DESC, urgency DESC"
-            ).fetchall()
-        return [dict(r) for r in rows]
+        return kernel.query_state(
+            "goals", status="active", order="importance_urgency_desc", limit=500
+        )
 
     def _get_stagnant_goals(self) -> list[dict]:
-        with db.get_db() as conn:
-            rows = conn.execute(
-                "SELECT * FROM goals WHERE status = 'active' "
-                "AND last_activity_at < datetime('now', '-3 days')"
-            ).fetchall()
-        return [dict(r) for r in rows]
+        return kernel.query_state(
+            "goals",
+            status="active",
+            last_activity_older_than_days=3,
+            order="last_activity_asc",
+            limit=500,
+        )
 
     def _get_completed_goals(self, since: str) -> list[dict]:
-        with db.get_db() as conn:
-            rows = conn.execute(
-                "SELECT * FROM goals WHERE status = 'completed' AND updated_at >= ?",
-                (since,),
-            ).fetchall()
-        return [dict(r) for r in rows]
+        return kernel.query_state(
+            "goals", status="completed", updated_since=since, limit=500
+        )
 
     def _build_review_content(
         self, review_type: str, start: str, end: str,

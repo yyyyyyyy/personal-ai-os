@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.core.runtime.kernel.event import Event
 
@@ -132,7 +132,7 @@ def recent_legacy_events(
     if event_type in _APPLICATION_EVENT_TYPES:
         return _application_legacy_events(days=days, limit=limit, event_type=event_type)
 
-    since_ts = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    since_ts = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     filters: dict = {"since_ts": since_ts, "limit": limit, "order": "desc"}
     if event_type:
         kernel_types = _LEGACY_TO_KERNEL.get(event_type, [event_type])

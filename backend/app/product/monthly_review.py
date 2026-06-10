@@ -1,7 +1,7 @@
 """Monthly Review trigger."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.core.review_engine import review_engine
 from app.store.database import db
@@ -22,7 +22,7 @@ def generate_monthly_review() -> dict | None:
     with db.get_db() as conn:
         conn.execute(
             "INSERT INTO notifications (id, type, title, content, created_at) VALUES (?, 'review', ?, ?, ?)",
-            (notification_id, title, content, datetime.utcnow().isoformat()),
+            (notification_id, title, content, datetime.now(UTC).isoformat()),
         )
 
     return {"id": notification_id, "type": "review", "title": title, "content": content}

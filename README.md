@@ -79,7 +79,9 @@ npm run dev
 make test          # backend pytest + frontend tsc
 make test-backend  # 仅后端测试
 make test-frontend # 仅前端类型检查
-make boundary      # Kernel 边界守卫检查
+make boundary      # Kernel 边界守卫（governed 表 bypass → CI 失败）
+make boundary-inventory  # 全仓 bypass 清单（当前应为 0）
+make boundary-strict   # 零债务模式（与 CI 一致）
 make rebuild-verify # Event Log 重建验证
 ```
 
@@ -132,6 +134,22 @@ User → Runtime Kernel (Event Log / State / Permissions)
 ```
 
 架构契约详见 [RUNTIME_SPEC.md](RUNTIME_SPEC.md)。
+
+### Runtime Status（W5 — Runtime Closure）
+
+| 指标 | 状态 |
+|------|------|
+| Boundary Debt | **0**（`make boundary --strict`） |
+| Read Surface Validation | **PASS** |
+| ABI expansion during validation | **0** |
+
+**Validated apps:** Morning Brief · Review · Dashboard · Deadline Alert
+
+**Closure（闭合性）：** 写路径 `verify_rebuild`（Event → State）；读路径 `query_state` + `read_events`（State → App）；边界 `check_boundary`（App ↛ governed DB）。四类读模型均未逼出新 ABI。
+
+**Scope（职责边界）：** Runtime = Facts；App = Interpretation。Brief / Dashboard / Review 迁移中未出现 `query_brief()` 等产品语义 API — Runtime 不保存业务含义。
+
+W6+ 考卷：**Closure 是否稳定？Scope 是否漂移？**（Knowledge 接入后，Runtime 是否仍不知道 Chunk / 周报 / 洞察语义？）
 
 ## 版本
 

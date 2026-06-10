@@ -10,11 +10,13 @@ import ChatView from "./components/chat/ChatView";
 import GoalsPage from "./pages/Goals";
 import TimelinePage from "./pages/Timeline";
 import DashboardPage from "./pages/Dashboard";
+import InboxPage from "./pages/Inbox";
 import { useNotifications } from "./hooks/useNotifications";
 
 const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
   { id: "chat", label: "对话", icon: "💬" },
   { id: "goals", label: "目标", icon: "🎯" },
+  { id: "inbox", label: "收件箱", icon: "📧" },
   { id: "timeline", label: "时间线", icon: "📅" },
   { id: "dashboard", label: "仪表盘", icon: "📊" },
 ];
@@ -179,6 +181,7 @@ export default function App() {
           )
         )}
         {currentPage === "goals" && <GoalsPage />}
+        {currentPage === "inbox" && <InboxPage />}
         {currentPage === "timeline" && <TimelinePage />}
         {currentPage === "dashboard" && <DashboardPage />}
       </main>

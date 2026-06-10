@@ -104,6 +104,8 @@
 
 ```bash
 python3 backend/scripts/check_boundary.py
+python3 backend/scripts/check_boundary.py --inventory   # full violation list
+python3 backend/scripts/check_boundary.py --strict      # fail if any allowlisted debt remains
 python3 backend/scripts/verify_rebuild.py
 python3 -m pytest backend/tests/runtime/ backend/tests/integration/ -q
 
@@ -120,12 +122,13 @@ rg "from app\.store\.vector" backend/app/core/agents
 
 ## Known Debt (Outside W2 Scan Scope)
 
-| path | reason |
+All governed-projection bypasses in enforced scan scope are resolved (Boundary Debt = 0, 2026-06-10).
+
+| path | status |
 |------|--------|
-| `product/morning_brief.py` | Product layer — not in `api/agents/runtime` scan |
-| `core/review_engine.py` | Core module — not in scan scope |
-| `core/telemetry/telemetry.py` | Observability — W4+ |
-| `core/scheduler.py` | Legacy scheduler — W4+ |
-| `agents/memory_engine.py` | ✅ W3 — Kernel owns Chroma sync |
+| `product/morning_brief.py` | ✅ `kernel.query_state` |
+| `core/review_engine.py` | ✅ `query_state` + `read_events` |
+| `core/telemetry/telemetry.py` | ✅ `query_state` + App aggregation |
+| `core/scheduler.py` | ✅ deadline alert via `query_state` (legacy cron retained; migrate to scheduler_v2 separately) |
 | `agents/conversation.py` | Application Storage |
 | `agents/memory_v2.py` | Application Storage (`user_profile`) |

@@ -2,23 +2,24 @@
 
 import json
 
+import httpx
+
 
 class BrowserServer:
-    """Browser automation. Uses requests for read operations, Playwright stubs for automation."""
+    """Browser automation. Uses httpx for read operations, Playwright stubs for automation."""
 
-    def open_page(self, url: str) -> str:
+    async def open_page(self, url: str) -> str:
         """Open a web page and return its content summary."""
         try:
-            import asyncio
+            async with httpx.AsyncClient(
+                timeout=20,
+                follow_redirects=True,
+                headers={"User-Agent": "PersonalAIOS/1.0"},
+            ) as client:
+                resp = await client.get(url)
+                text = resp.text[:5000]
+                status = resp.status_code
 
-            import httpx
-
-            async def fetch():
-                async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-                    resp = await client.get(url, headers={"User-Agent": "PersonalAIOS/1.0"})
-                    return resp.text[:5000], resp.status_code
-
-            text, status = asyncio.run(fetch())
             title = ""
             for line in text.splitlines():
                 if "<title>" in line:
@@ -34,12 +35,12 @@ class BrowserServer:
         except Exception as e:
             return json.dumps({"error": str(e), "url": url})
 
-    def search_and_extract(self, query: str, site: str = "") -> str:
+    async def search_and_extract(self, query: str, site: str = "") -> str:
         """Search a site and extract text content."""
         search_url = f"https://duckduckgo.com/html/?q={query}"
         if site:
             search_url += f"+site%3A{site}"
-        return self.open_page(search_url)
+        return await self.open_page(search_url)
 
     def take_screenshot(self, url: str) -> str:
         """Take a screenshot of a webpage (requires Playwright)."""

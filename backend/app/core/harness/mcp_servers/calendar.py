@@ -1,7 +1,7 @@
 """Calendar MCP Server — local ICS file and Google Calendar operations."""
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -44,7 +44,7 @@ class CalendarServer:
                   calendar: str = "default", description: str = "") -> str:
         """Add an event to the calendar ICS file."""
         ics_path = self.ics_dir / f"{calendar}.ics"
-        now = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        now = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         dt_start = date.replace("-", "") + "T" + time.replace(":", "") + "00"
 
         entry = (

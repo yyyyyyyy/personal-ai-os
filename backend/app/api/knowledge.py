@@ -1,7 +1,7 @@
 """Knowledge Base API — import documents and perform RAG-based Q&A."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, UploadFile
 
@@ -44,7 +44,7 @@ async def import_document(body: dict):
         raise HTTPException(status_code=400, detail="Content is required")
 
     doc_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # Store document record
     with db.get_db() as conn:
@@ -95,7 +95,7 @@ async def upload_document(file: UploadFile):
         raise HTTPException(status_code=400, detail="File is empty")
 
     doc_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
 
     with db.get_db() as conn:
         conn.execute(

@@ -4,8 +4,9 @@ Extends the old scheduler.py with event-driven and dependency-driven scheduling.
 The old scheduler.py continues to run in parallel during migration.
 """
 
+import asyncio
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -45,6 +46,10 @@ async def _on_schedule_triggered(event_type: str, payload: dict):
         _run_monthly_review()
     elif task_type == "deadline_alert":
         _run_deadline_alert()
+    elif task_type == "inbox_poll":
+        _run_inbox_poll()
+    elif task_type == "inbox_digest":
+        _run_inbox_digest()
 
 
 def init_scheduler_v2():
@@ -120,6 +125,22 @@ def init_scheduler_v2():
         replace_existing=True,
     )
 
+    _scheduler.add_job(
+        _run_inbox_poll,
+        CronTrigger(minute="*/15"),
+        id="inbox_poll",
+        name="收件箱轮询",
+        replace_existing=True,
+    )
+
+    _scheduler.add_job(
+        _run_inbox_digest,
+        CronTrigger(hour=8, minute=30),
+        id="inbox_digest",
+        name="收件箱摘要",
+        replace_existing=True,
+    )
+
     # Sync to database
     _sync_v2_schedules_to_db()
 
@@ -154,7 +175,7 @@ def _sync_v2_schedules_to_db():
                 conn.execute(
                     """INSERT INTO schedules (id, name, cron_expr, task_type, trigger_type, enabled, created_at)
                        VALUES (?, ?, ?, ?, 'cron', 1, ?)""",
-                    (schedule_id, job.name, str(job.trigger), job.id, datetime.utcnow().isoformat()),
+                    (schedule_id, job.name, str(job.trigger), job.id, datetime.now(UTC).isoformat()),
                 )
 
 
@@ -197,6 +218,26 @@ def _run_world_model_snapshot():
         print(f"World model snapshot error: {e}")
 
 
+def _run_inbox_poll():
+    try:
+        from app.product.inbox import poll_inbox
+
+        asyncio.run(poll_inbox())
+        _update_v2_last_run("收件箱轮询")
+    except Exception as e:
+        print(f"Inbox poll error: {e}")
+
+
+def _run_inbox_digest():
+    try:
+        from app.product.inbox import generate_inbox_digest
+
+        generate_inbox_digest()
+        _update_v2_last_run("收件箱摘要")
+    except Exception as e:
+        print(f"Inbox digest error: {e}")
+
+
 def _run_daily_review():
     try:
         from app.product.daily_review import generate_daily_review
@@ -226,7 +267,7 @@ def _run_monthly_review():
 
 def _deadline_target_dates() -> set:
     """UTC calendar dates for +1 and +3 day deadline alerts (matches legacy SQL)."""
-    today_utc = datetime.utcnow().date()
+    today_utc = datetime.now(UTC).date()
     return {today_utc + timedelta(days=offset) for offset in (1, 3)}
 
 
@@ -252,7 +293,7 @@ def _run_deadline_alert():
                 deadlines.append(goal)
 
         for goal in deadlines:
-            delta = datetime.fromisoformat(goal["deadline"]) - datetime.utcnow()
+            delta = datetime.fromisoformat(goal["deadline"]) - datetime.now(UTC)
             days_left = delta.days
 
             notification_id = str(uuid.uuid4())
@@ -263,7 +304,7 @@ def _run_deadline_alert():
                 conn.execute(
                     "INSERT INTO notifications (id, type, title, content, created_at) "
                     "VALUES (?, 'alert', ?, ?, ?)",
-                    (notification_id, title, content, datetime.utcnow().isoformat()),
+                    (notification_id, title, content, datetime.now(UTC).isoformat()),
                 )
 
         _update_v2_last_run("deadline_alert")
@@ -275,5 +316,5 @@ def _update_v2_last_run(task_name: str):
     with db.get_db() as conn:
         conn.execute(
             "UPDATE schedules SET last_run_at = ? WHERE name = ?",
-            (datetime.utcnow().isoformat(), task_name),
+            (datetime.now(UTC).isoformat(), task_name),
         )

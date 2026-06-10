@@ -4,7 +4,7 @@ Replaces the passive embedding-only approach with structured user profiles.
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.store.database import db
 
@@ -19,7 +19,7 @@ class UserProfile:
         if category not in CATEGORIES:
             raise ValueError(f"Unknown category: {category}")
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         existing = self._get_category(category)
 
         if existing:
@@ -27,8 +27,8 @@ class UserProfile:
             existing_confidence = existing["confidence"]
 
             # Apply time decay to existing: 30+ days old -> confidence * 0.5
-            updated_at = datetime.fromisoformat(existing["updated_at"]) if existing.get("updated_at") else datetime.utcnow()
-            if (datetime.utcnow() - updated_at) > timedelta(days=30):
+            updated_at = datetime.fromisoformat(existing["updated_at"]) if existing.get("updated_at") else datetime.now(UTC)
+            if (datetime.now(UTC) - updated_at) > timedelta(days=30):
                 existing_confidence *= 0.5
 
             # Merge: keep higher confidence value per key
@@ -81,7 +81,7 @@ class UserProfile:
 
     def refresh_all(self):
         """Recalculate time decay on all categories."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         for category in CATEGORIES:
             existing = self._get_category(category)
             if existing:
@@ -127,7 +127,7 @@ class RecallRanker:
             created = datetime.fromisoformat(created_at)
         except (ValueError, TypeError):
             return 0.3
-        days_old = (datetime.utcnow() - created).days
+        days_old = (datetime.now(UTC) - created).days
         return max(0.1, 2.0 ** (-days_old / 30))
 
 

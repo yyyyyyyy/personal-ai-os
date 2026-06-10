@@ -84,6 +84,10 @@ class Kernel:
                 conn.execute("ALTER TABLE memories ADD COLUMN decayed_at DATETIME")
             except Exception:
                 pass
+            try:
+                conn.execute("ALTER TABLE memories ADD COLUMN status TEXT DEFAULT 'active'")
+            except Exception:
+                pass
 
     # --- Truth layer ---------------------------------------------------------
 
@@ -146,7 +150,7 @@ class Kernel:
         Runs after the SQL transaction commits so Chroma failures cannot roll
         back governed memory events or projections.
         """
-        if event.type not in ("MemoryDerived", "MemoryUpdated", "MemoryDeleted"):
+        if event.type not in ("MemoryDerived", "MemoryUpdated", "MemoryDeleted", "BeliefFormed"):
             return
         try:
             from app.store.vector import vector_store
@@ -249,7 +253,17 @@ class Kernel:
                 continue
             if flt["aggregate_type"] and flt["aggregate_type"] != event.aggregate_type:
                 continue
-            handler(event)
+            try:
+                handler(event)
+            except Exception as exc:
+                logger.warning(
+                    "Event subscriber failed for %s (aggregate=%s/%s): %s",
+                    event.type,
+                    event.aggregate_type,
+                    event.aggregate_id,
+                    exc,
+                    exc_info=True,
+                )
 
     # --- Read layer (projections) -------------------------------------------
 
@@ -268,6 +282,8 @@ class Kernel:
             return self._query_actions(filters)
         if selector == "memories":
             return self._query_memories(filters)
+        if selector == "patterns":
+            return self._query_patterns(filters)
         raise ValueError(f"Unknown state selector: {selector!r}")
 
     def _query_goals(self, filters: dict[str, Any]) -> list[dict]:
@@ -461,6 +477,44 @@ class Kernel:
             params.append(limit)
             rows = conn.execute(
                 f"SELECT * FROM memories{where} ORDER BY confidence DESC, created_at DESC LIMIT ?",
+                params,
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def _query_patterns(self, filters: dict[str, Any]) -> list[dict]:
+        """Read statistical patterns (time_distribution, topic_distribution, trend).
+
+        Filters supported: pattern_type, metric, window_days, limit.
+        """
+        pattern_id = filters.get("id")
+        pattern_type = filters.get("pattern_type")
+        metric = filters.get("metric")
+        window_days = filters.get("window_days")
+        limit = filters.get("limit", 50)
+
+        with self._db.get_db() as conn:
+            if pattern_id:
+                row = conn.execute(
+                    "SELECT * FROM patterns WHERE id = ?", (pattern_id,)
+                ).fetchone()
+                return [dict(row)] if row else []
+
+            clauses: list[str] = []
+            params: list[Any] = []
+            if pattern_type is not None:
+                clauses.append("pattern_type = ?")
+                params.append(pattern_type)
+            if metric is not None:
+                clauses.append("metric = ?")
+                params.append(metric)
+            if window_days is not None:
+                clauses.append("window_days = ?")
+                params.append(int(window_days))
+
+            where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+            params.append(limit)
+            rows = conn.execute(
+                f"SELECT * FROM patterns{where} ORDER BY created_at DESC LIMIT ?",
                 params,
             ).fetchall()
         return [dict(r) for r in rows]

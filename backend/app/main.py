@@ -11,6 +11,7 @@ from app.api import (
     chat,
     events,
     goals,
+    inbox,
     knowledge,
     memory,
     notifications,
@@ -24,6 +25,7 @@ from app.config import settings
 from app.core.runtime.background_worker import background_worker
 from app.core.runtime.event_bus import event_bus
 from app.core.runtime.kernel_event_bridge import register_kernel_event_bridge
+from app.core.runtime.pattern.aggregators import pattern_aggregator
 from app.core.runtime.scheduler_v2 import init_scheduler_v2, shutdown_scheduler_v2
 from app.core.scheduler import init_scheduler, shutdown_scheduler
 
@@ -38,6 +40,9 @@ async def lifespan(app: FastAPI):
     await event_bus.start()
     register_kernel_event_bridge()
 
+    # Start Pattern Aggregator (Evidence → Pattern layer)
+    pattern_aggregator.start()
+
     # Initialize both schedulers (old + v2, side by side during migration)
     init_scheduler()
     init_scheduler_v2()
@@ -45,10 +50,14 @@ async def lifespan(app: FastAPI):
     # Start background worker
     await background_worker.start()
 
+    from app.core.runtime.trigger_engine import trigger_engine
+    trigger_engine.seed_builtin_triggers()
+
     yield
 
     # Shutdown
     await background_worker.stop()
+    pattern_aggregator.stop()
     shutdown_scheduler_v2()
     shutdown_scheduler()
     await event_bus.stop()
@@ -90,12 +99,7 @@ app.include_router(telemetry_api.router)
 app.include_router(approvals.router)
 app.include_router(background_tasks.router)
 app.include_router(triggers.router)
-
-# Seed built-in triggers
-@app.on_event("startup")
-async def seed_triggers():
-    from app.core.runtime.trigger_engine import trigger_engine
-    trigger_engine.seed_builtin_triggers()
+app.include_router(inbox.router)
 
 
 @app.get("/")

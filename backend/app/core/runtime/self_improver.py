@@ -5,7 +5,7 @@ Tracks user approvals/rejections, manages prompt templates with versioning.
 
 import json
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.store.database import db
 
@@ -16,7 +16,7 @@ class SelfImprover:
     def log_feedback(self, prompt_template: str, output: str, accepted: bool, reason: str = ""):
         """Log a user decision for training data."""
         feedback_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
 
         with db.get_db() as conn:
             conn.execute(

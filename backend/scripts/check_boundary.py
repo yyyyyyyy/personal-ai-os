@@ -1,31 +1,26 @@
 #!/usr/bin/env python
 """Kernel boundary guard — governed projection + execution authority.
 
-Scans Python files under app/ and fails if User Space:
+Scans Python files under app/ (User Space) and fails if code bypasses Kernel:
   - INSERT/UPDATE/DELETE on governed projection tables
   - SELECT from governed projection tables
-  - imports app.core.harness.mcp_hub (except Kernel + capability subsystem)
+  - imports app.core.harness.mcp_hub (except Kernel + harness)
+
+Known historical violations are allowlisted so CI blocks *new* bypasses only.
+Shrink the allowlist as violations are fixed (target: empty).
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
+from typing import TextIO
 
 PROJECTION_TABLES = ("goals", "actions", "approvals", "tasks", "memories", "event_log")
 KERNEL_PREFIX = Path("core/runtime/kernel")
-CAPABILITY_SUBSYSTEM_PREFIXES = (
-    Path("core/runtime/kernel"),
-    Path("core/harness"),
-    Path("core/runtime/capability_policy.py"),
-    Path("core/runtime/sensitive_router.py"),
-)
-USER_SPACE_PREFIXES = (
-    Path("api"),
-    Path("core/agents"),
-    Path("core/runtime"),
-)
+HARNESS_PREFIX = Path("core/harness")
 
 DML_WRITE_PATTERN = re.compile(
     r"\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(" + "|".join(PROJECTION_TABLES) + r")\b",
@@ -40,17 +35,25 @@ MCP_HUB_IMPORT_PATTERN = re.compile(
     re.MULTILINE,
 )
 
+# Violation key: (posix path under app/, line number, kind, target table/module)
+ViolationKey = tuple[str, int, str, str]
 
-def _in_user_space(rel: Path) -> bool:
-    if rel.parts[: len(KERNEL_PREFIX.parts)] == KERNEL_PREFIX.parts:
-        return False
-    return any(rel.parts[: len(p.parts)] == p.parts for p in USER_SPACE_PREFIXES)
+# Known debt — remove entries as files migrate to kernel.query_state / kernel.read_events.
+# Target: empty set (Boundary Debt = 0).
+KNOWN_VIOLATION_ALLOWLIST: frozenset[ViolationKey] = frozenset()
+
+
+def _is_kernel_space(rel: Path) -> bool:
+    return rel.parts[: len(KERNEL_PREFIX.parts)] == KERNEL_PREFIX.parts
+
+
+def _is_harness(rel: Path) -> bool:
+    return rel.parts[: len(HARNESS_PREFIX.parts)] == HARNESS_PREFIX.parts
 
 
 def _capability_subsystem_file(rel: Path) -> bool:
-    if rel.parts[: len(Path("core/harness").parts)] == Path("core/harness").parts:
-        return True
-    if rel.parts[: len(KERNEL_PREFIX.parts)] == KERNEL_PREFIX.parts:
+    """Files allowed to import mcp_hub."""
+    if _is_kernel_space(rel) or _is_harness(rel):
         return True
     return rel in {
         Path("core/runtime/capability_policy.py"),
@@ -58,12 +61,17 @@ def _capability_subsystem_file(rel: Path) -> bool:
     }
 
 
+def _in_scan_scope(rel: Path) -> bool:
+    """User Space: all app/ code except Kernel Space."""
+    return not _is_kernel_space(rel)
+
+
 def scan_app_root(app_root: Path) -> list[tuple[Path, int, str, str, str]]:
     """Return violations as (path, line_no, line, target, kind)."""
     violations: list[tuple[Path, int, str, str, str]] = []
     for path in sorted(app_root.rglob("*.py")):
         rel = path.relative_to(app_root)
-        if not _in_user_space(rel):
+        if not _in_scan_scope(rel):
             continue
         try:
             text = path.read_text(encoding="utf-8")
@@ -91,7 +99,51 @@ def scan_app_root(app_root: Path) -> list[tuple[Path, int, str, str, str]]:
     return violations
 
 
-def main() -> int:
+def violation_key(rel: Path, lineno: int, target: str, kind: str) -> ViolationKey:
+    return (rel.as_posix(), lineno, kind, target)
+
+
+def partition_violations(
+    violations: list[tuple[Path, int, str, str, str]],
+    allowlist: frozenset[ViolationKey],
+) -> tuple[list[tuple[Path, int, str, str, str]], list[tuple[Path, int, str, str, str]]]:
+    known: list[tuple[Path, int, str, str, str]] = []
+    new: list[tuple[Path, int, str, str, str]] = []
+    for item in violations:
+        rel, lineno, _line, target, kind = item
+        key = violation_key(rel, lineno, target, kind)
+        if key in allowlist:
+            known.append(item)
+        else:
+            new.append(item)
+    return known, new
+
+
+def print_violations(
+    violations: list[tuple[Path, int, str, str, str]],
+    *,
+    header: str,
+    stream: TextIO = sys.stderr,
+) -> None:
+    print(header, file=stream)
+    for rel, lineno, line, target, kind in violations:
+        print(f"  {rel.as_posix()}:{lineno} [{kind}:{target}] {line}", file=stream)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Kernel boundary guard for Personal AI Runtime")
+    parser.add_argument(
+        "--inventory",
+        action="store_true",
+        help="Print all violations (known + new) and exit 0",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail on allowlisted violations too (use when allowlist is empty)",
+    )
+    args = parser.parse_args(argv)
+
     backend = Path(__file__).resolve().parent.parent
     app_root = backend / "app"
     if not app_root.is_dir():
@@ -99,13 +151,48 @@ def main() -> int:
         return 1
 
     violations = scan_app_root(app_root)
-    if violations:
-        print("KERNEL BOUNDARY VIOLATION — User Space governed/execution bypass:", file=sys.stderr)
-        for rel, lineno, line, target, kind in violations:
-            print(f"  {rel}:{lineno} [{kind}:{target}] {line}", file=sys.stderr)
+    known, new = partition_violations(violations, KNOWN_VIOLATION_ALLOWLIST)
+
+    if args.inventory:
+        print("KERNEL BOUNDARY INVENTORY")
+        print(f"  Scan scope: app/ except {KERNEL_PREFIX.as_posix()}/")
+        print(f"  Total violations: {len(violations)}")
+        print(f"  Known (allowlisted): {len(known)}")
+        print(f"  New (would fail CI): {len(new)}")
+        if known:
+            print_violations(known, header="\nKnown violations (allowlisted debt):", stream=sys.stdout)
+        if new:
+            print_violations(new, header="\nNew violations:", stream=sys.stdout)
+        if not violations:
+            print("\nNo governed bypass detected.")
+        return 0
+
+    if new:
+        print_violations(
+            new,
+            header="KERNEL BOUNDARY VIOLATION — new governed/execution bypass (not in allowlist):",
+        )
+        if known:
+            print(
+                f"\n({len(known)} known allowlisted violation(s) — run --inventory to list)",
+                file=sys.stderr,
+            )
         return 1
 
-    print("KERNEL BOUNDARY OK — no governed/execution bypass outside kernel/")
+    if args.strict and known:
+        print_violations(
+            known,
+            header="KERNEL BOUNDARY VIOLATION — allowlisted debt (--strict mode):",
+        )
+        return 1
+
+    if known:
+        print(
+            f"KERNEL BOUNDARY OK — no new bypasses "
+            f"({len(known)} known allowlisted violation(s), run --inventory)"
+        )
+    else:
+        print("KERNEL BOUNDARY OK — no governed/execution bypass outside kernel/")
     return 0
 
 

@@ -5,7 +5,7 @@ Scans events table periodically, matches trigger conditions, generates suggestio
 
 import json
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.core.runtime.event_bus import EventType, event_bus
 from app.core.runtime.kernel_instance import kernel
@@ -48,7 +48,7 @@ class TriggerEngine:
                            VALUES (?, ?, ?, ?, ?, ?, 1, ?)""",
                         (tid, trigger["name"], trigger["trigger_type"],
                          trigger["condition_json"], trigger["action_type"],
-                         trigger["action_config"], datetime.utcnow().isoformat()),
+                         trigger["action_config"], datetime.now(UTC).isoformat()),
                     )
 
     def evaluate_all(self) -> list[dict]:
@@ -153,7 +153,7 @@ class TriggerEngine:
         action_config: dict | None = None,
     ) -> dict | None:
         tid = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         with db.get_db() as conn:
             conn.execute(
                 """INSERT INTO triggers (id, name, trigger_type, condition_json, action_type, action_config, created_at)

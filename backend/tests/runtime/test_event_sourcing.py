@@ -82,6 +82,26 @@ class TestEventSourcing:
         kernel.emit_event("GoalUpdated", "goal", "g1", {"title": "B"})
         assert seen == ["GoalCreated"]
 
+    def test_subscribe_isolation(self, tmp_path):
+        """A failing subscriber must not block others or event persistence."""
+        kernel, _ = make_kernel(tmp_path)
+        seen: list[str] = []
+
+        def bad_handler(_event):
+            raise RuntimeError("subscriber boom")
+
+        def good_handler(event):
+            seen.append(event.type)
+
+        kernel.subscribe_events(bad_handler)
+        kernel.subscribe_events(good_handler)
+        kernel.emit_event("GoalCreated", "goal", "g1", {"title": "A"})
+
+        assert seen == ["GoalCreated"]
+        goals = kernel.query_state("goals")
+        assert len(goals) == 1
+        assert goals[0]["title"] == "A"
+
     def test_correlation_id_traces_a_chain(self, tmp_path):
         kernel, _ = make_kernel(tmp_path)
         cid = "report_abc"

@@ -1,8 +1,9 @@
 """Morning Brief generator — creates a daily morning brief for the user."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
+from app.core.runtime.kernel_instance import kernel
 from app.core.telemetry.event_recorder import Event, event_recorder
 from app.store.database import db
 
@@ -12,31 +13,22 @@ def generate_morning_brief() -> dict | None:
 
     Returns the brief as a dict, or None if no active goals.
     """
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
-    # Get active goals sorted by priority
-    with db.get_db() as conn:
-        goals = conn.execute(
-            """SELECT * FROM goals WHERE status = 'active'
-               ORDER BY importance * urgency DESC LIMIT 5"""
-        ).fetchall()
-        goals = [dict(g) for g in goals]
-
-        # Get stagnant goals
-        stagnant = conn.execute(
-            """SELECT * FROM goals WHERE status = 'active'
-               AND last_activity_at < datetime('now', '-3 days')"""
-        ).fetchall()
-        stagnant = [dict(s) for s in stagnant]
-
-        # Get imminent deadlines (within 3 days)
-        deadlines = conn.execute(
-            """SELECT * FROM goals WHERE status = 'active'
-               AND deadline IS NOT NULL
-               AND deadline BETWEEN datetime('now') AND datetime('now', '+3 days')
-               ORDER BY deadline ASC"""
-        ).fetchall()
-        deadlines = [dict(d) for d in deadlines]
+    goals = kernel.query_state(
+        "goals", status="active", order="importance_urgency_desc", limit=5
+    )
+    stagnant = kernel.query_state(
+        "goals",
+        status="active",
+        last_activity_older_than_days=3,
+        order="last_activity_asc",
+        limit=500,
+    )
+    deadlines = kernel.query_state(
+        "goals", status="active", deadline_within_days=3, limit=50
+    )
+    deadlines.sort(key=lambda d: d.get("deadline") or "")
 
     top_priorities = goals[:3]
     if not top_priorities and not deadlines:

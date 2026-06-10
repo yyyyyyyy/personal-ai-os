@@ -4,10 +4,22 @@ Records every LLM inference and tool invocation for cost tracking, debugging, an
 """
 
 import uuid
+from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
+from app.core.runtime.kernel_instance import kernel
 from app.store.database import db
+
+
+def _parse_utc_datetime(value: str) -> datetime | None:
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 @dataclass
@@ -52,7 +64,7 @@ class Telemetry:
                     record.cost,
                     1 if record.success else 0,
                     record.error_message,
-                    datetime.utcnow().isoformat(),
+                    datetime.now(UTC).isoformat(),
                 ),
             )
         return call_id
@@ -69,7 +81,7 @@ class Telemetry:
                     1 if record.success else 0,
                     record.latency_ms,
                     record.error_message,
-                    datetime.utcnow().isoformat(),
+                    datetime.now(UTC).isoformat(),
                 ),
             )
         return call_id
@@ -131,26 +143,29 @@ class Telemetry:
 
     def get_memory_stats(self) -> dict:
         """Get memory system stats: total count, categories, recent additions."""
-        with db.get_db() as conn:
-            total = conn.execute("SELECT COUNT(*) as c FROM memories").fetchone()["c"]
-            by_category = conn.execute(
-                "SELECT category, COUNT(*) as count FROM memories GROUP BY category"
-            ).fetchall()
-            recent_count = conn.execute(
-                "SELECT COUNT(*) as c FROM memories WHERE created_at >= datetime('now', '-7 days')"
-            ).fetchone()["c"]
+        memories = kernel.query_state("memories", limit=5000)
+        cutoff = datetime.now(UTC) - timedelta(days=7)
+        recent_count = 0
+        for mem in memories:
+            created = mem.get("created_at")
+            if not created:
+                continue
+            created_dt = _parse_utc_datetime(created)
+            if created_dt and created_dt >= cutoff:
+                recent_count += 1
         return {
-            "total_memories": total,
-            "categories": {r["category"]: r["count"] for r in by_category},
+            "total_memories": len(memories),
+            "categories": dict(Counter(m.get("category") or "unknown" for m in memories)),
             "recent_7d": recent_count,
         }
 
     def get_health(self) -> dict:
         """Get runtime health snapshot."""
+        queue_len = sum(
+            len(kernel.query_state("tasks", status=status, limit=5000))
+            for status in ("pending", "running", "blocked")
+        )
         with db.get_db() as conn:
-            queue_len = conn.execute(
-                "SELECT COUNT(*) as c FROM tasks WHERE status IN ('pending', 'running', 'blocked')"
-            ).fetchone()["c"]
             llm_fail_rate = conn.execute(
                 """SELECT
                     CASE WHEN COUNT(*) > 0

@@ -194,6 +194,43 @@ export async function getHealth(): Promise<HealthSnapshot> {
 
 // --- Approval API ---
 
+// --- Inbox API ---
+
+export interface InboxEmail {
+  id: string;
+  sender: string;
+  subject: string;
+  preview: string;
+  received_at: string;
+  category: string;
+  importance: number;
+  reason: string;
+  notified: number;
+  digested: number;
+  created_at: string;
+}
+
+export async function listInboxEmails(category?: string): Promise<InboxEmail[]> {
+  const url = category
+    ? `${API_BASE}/inbox/?category=${encodeURIComponent(category)}`
+    : `${API_BASE}/inbox/`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to list inbox emails");
+  return res.json();
+}
+
+export async function getInboxDigest(): Promise<{ title?: string; content?: string; message?: string }> {
+  const res = await fetch(`${API_BASE}/inbox/digest`);
+  if (!res.ok) throw new Error("Failed to get inbox digest");
+  return res.json();
+}
+
+export async function triggerInboxPoll(): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/inbox/poll`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to poll inbox");
+  return res.json();
+}
+
 export async function resolveApproval(
   approvalId: string,
   decision: "approve" | "deny",

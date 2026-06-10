@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import ToolCallDisplay from "./ToolCallDisplay";
@@ -23,6 +24,7 @@ interface DisplayMessage {
   isStreaming?: boolean;
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
+  expandTools?: boolean;
 }
 
 interface Props {
@@ -57,6 +59,7 @@ export default function MessageItem({ message }: Props) {
           <ToolCallDisplay
             toolCalls={message.toolCalls}
             toolResults={message.toolResults || []}
+            defaultExpanded={message.expandTools ?? false}
           />
         )}
 
@@ -70,6 +73,7 @@ export default function MessageItem({ message }: Props) {
             ) : (
               <div className="markdown-content text-sm leading-relaxed prose-p:my-0">
                 <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
                   components={{
                     code({ className, children, ...props }) {
                       const match = /language-(\w+)/.exec(className || "");

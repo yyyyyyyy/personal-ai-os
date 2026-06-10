@@ -1,4 +1,4 @@
-.PHONY: install dev test test-backend test-frontend desktop boundary rebuild-verify docker-up docker-down
+.PHONY: install dev test test-backend test-frontend desktop boundary rebuild-verify belief-verify belief-quality belief-survival docker-up docker-down
 
 # Backend
 BACKEND_DIR := backend
@@ -30,8 +30,24 @@ desktop:
 boundary:
 	cd $(BACKEND_DIR) && python3 scripts/check_boundary.py
 
+boundary-inventory:
+	cd $(BACKEND_DIR) && python3 scripts/check_boundary.py --inventory
+
+boundary-strict:
+	cd $(BACKEND_DIR) && python3 scripts/check_boundary.py --strict
+
 rebuild-verify:
 	cd $(BACKEND_DIR) && python3 scripts/verify_rebuild.py
+
+# Pattern + Belief verification suite
+belief-verify:
+	cd $(BACKEND_DIR) && python3 scripts/verify_pattern_idempotency.py && python3 scripts/verify_belief_pipeline.py
+
+belief-quality:
+	cd $(BACKEND_DIR) && python3 scripts/verify_belief_quality.py
+
+belief-survival:
+	cd $(BACKEND_DIR) && python3 scripts/verify_belief_survival.py
 
 docker-up:
 	docker compose up --build

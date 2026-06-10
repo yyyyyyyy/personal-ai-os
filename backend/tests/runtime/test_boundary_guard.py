@@ -8,9 +8,9 @@ BACKEND = Path(__file__).resolve().parents[2]
 SCRIPT = BACKEND / "scripts" / "check_boundary.py"
 
 
-def run_check() -> subprocess.CompletedProcess[str]:
+def run_check(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(SCRIPT)],
+        [sys.executable, str(SCRIPT), *args],
         cwd=str(BACKEND),
         capture_output=True,
         text=True,
@@ -19,14 +19,49 @@ def run_check() -> subprocess.CompletedProcess[str]:
 
 
 class TestBoundaryGuard:
-    def test_clean_codebase_passes(self):
+    def test_codebase_passes_with_allowlisted_debt(self):
+        """Known debt is allowlisted; CI passes but reports debt count."""
         result = run_check()
         assert result.returncode == 0, result.stderr or result.stdout
         assert "KERNEL BOUNDARY OK" in result.stdout
 
+    def test_inventory_lists_known_violations(self):
+        result = run_check("--inventory")
+        assert result.returncode == 0, result.stderr or result.stdout
+        assert "Total violations: 0" in result.stdout
+        assert "New (would fail CI): 0" in result.stdout
+
+    def test_strict_mode_passes_when_allowlist_empty(self):
+        result = run_check("--strict")
+        assert result.returncode == 0, result.stderr or result.stdout
+        assert "KERNEL BOUNDARY OK" in result.stdout
+
+    def test_new_violation_not_in_allowlist_fails(self, tmp_path):
+        fake_app = tmp_path / "app" / "product"
+        fake_app.mkdir(parents=True)
+        bad_file = fake_app / "evil_brief.py"
+        bad_file.write_text(
+            'rows = conn.execute("SELECT * FROM goals WHERE status = \'active\'").fetchall()',
+            encoding="utf-8",
+        )
+
+        sys.path.insert(0, str(BACKEND))
+        try:
+            from scripts.check_boundary import (
+                KNOWN_VIOLATION_ALLOWLIST,
+                partition_violations,
+                scan_app_root,
+            )
+
+            violations = scan_app_root(tmp_path / "app")
+            _known, new = partition_violations(violations, KNOWN_VIOLATION_ALLOWLIST)
+            assert len(new) == 1
+            assert new[0][3] == "goals"
+        finally:
+            sys.path.pop(0)
+
     def test_violation_detected_mcp_hub_import(self, tmp_path):
-        """mcp_hub import in User Space must fail."""
-        fake_app = tmp_path / "app" / "api"
+        fake_app = tmp_path / "app" / "product"
         fake_app.mkdir(parents=True)
         bad_file = fake_app / "evil.py"
         bad_file.write_text("from app.core.harness.mcp_hub import mcp_hub\n", encoding="utf-8")
@@ -43,7 +78,6 @@ class TestBoundaryGuard:
             sys.path.pop(0)
 
     def test_violation_detected_dml_write(self, tmp_path):
-        """A deliberate DML write outside kernel/ must fail the guard."""
         fake_app = tmp_path / "app" / "api" / "evil"
         fake_app.mkdir(parents=True)
         bad_file = fake_app / "bad.py"
@@ -60,13 +94,12 @@ class TestBoundaryGuard:
         finally:
             sys.path.pop(0)
 
-    def test_violation_detected_select_in_runtime_engine(self, tmp_path):
-        """Governed SELECT in User Space must fail."""
-        fake_app = tmp_path / "app" / "core" / "runtime"
+    def test_violation_detected_select_in_product(self, tmp_path):
+        fake_app = tmp_path / "app" / "product"
         fake_app.mkdir(parents=True)
-        bad_file = fake_app / "task_engine.py"
+        bad_file = fake_app / "leak.py"
         bad_file.write_text(
-            'row = conn.execute("SELECT * FROM tasks WHERE id = ?", (tid,)).fetchone()',
+            'rows = conn.execute("SELECT * FROM tasks WHERE status = \'pending\'").fetchall()',
             encoding="utf-8",
         )
 
@@ -81,13 +114,12 @@ class TestBoundaryGuard:
         finally:
             sys.path.pop(0)
 
-    def test_violation_detected_select_in_agents(self, tmp_path):
-        """Governed SELECT in agents/ must fail."""
-        fake_app = tmp_path / "app" / "core" / "agents"
+    def test_kernel_space_excluded(self, tmp_path):
+        fake_app = tmp_path / "app" / "core" / "runtime" / "kernel"
         fake_app.mkdir(parents=True)
-        bad_file = fake_app / "evil.py"
-        bad_file.write_text(
-            'rows = conn.execute("SELECT * FROM goals WHERE status = \'active\'").fetchall()',
+        ok_file = fake_app / "kernel.py"
+        ok_file.write_text(
+            'row = conn.execute("SELECT * FROM goals WHERE id = ?", (gid,)).fetchone()',
             encoding="utf-8",
         )
 
@@ -96,7 +128,6 @@ class TestBoundaryGuard:
             from scripts.check_boundary import scan_app_root
 
             violations = scan_app_root(tmp_path / "app")
-            assert len(violations) == 1
-            assert violations[0][3] == "goals"
+            assert violations == []
         finally:
             sys.path.pop(0)

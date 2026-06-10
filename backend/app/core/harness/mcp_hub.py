@@ -235,10 +235,39 @@ class MCPHub:
                 "type": "object",
                 "properties": {
                     "limit": {"type": "integer", "description": "Max emails to return (default 10)."},
-                    "unread_only": {"type": "boolean", "description": "Only show unread emails (default true)."},
+                    "unread_only": {
+                        "type": "boolean",
+                        "description": "Only show unread emails (default false). Set true for 未读邮件 only.",
+                    },
                 },
             },
             handler=email_server.check_inbox,
+        ))
+
+        self.register_tool(ToolDef(
+            name="read_inbox_email",
+            description=(
+                "Read the full content of one email by position. "
+                "Index 1 = newest. Use when user asks for 第N封, 下一封, or 继续 reading emails."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "index": {
+                        "type": "integer",
+                        "description": "1-based position (1=newest). Default 1.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "How many recent emails to search within (default 30).",
+                    },
+                    "unread_only": {
+                        "type": "boolean",
+                        "description": "Only search unread (default false).",
+                    },
+                },
+            },
+            handler=email_server.read_inbox_email,
         ))
 
         self.register_tool(ToolDef(
@@ -269,6 +298,7 @@ class MCPHub:
                 "required": ["url"],
             },
             handler=browser_server.open_page,
+            is_async=True,
         ))
 
         self.register_tool(ToolDef(
@@ -283,6 +313,7 @@ class MCPHub:
                 "required": ["query"],
             },
             handler=browser_server.search_and_extract,
+            is_async=True,
         ))
 
     def _register_clipboard_ocr_tools(self):

@@ -30,6 +30,7 @@ interface DisplayMessage {
   role: string;
   content: string;
   isStreaming?: boolean;
+  expandTools?: boolean;
   toolCalls?: Array<{
     index: number;
     id: string;
@@ -39,21 +40,48 @@ interface DisplayMessage {
   toolResults?: ToolResult[];
 }
 
+function parseToolCalls(raw: string): DisplayMessage["toolCalls"] {
+  const parsed = JSON.parse(raw);
+  const list = Array.isArray(parsed) ? parsed : [];
+  return list.map((tc: any, idx: number) => ({
+    index: tc.index ?? idx,
+    id: tc.id ?? "",
+    function_name: tc.function?.name ?? tc.function_name ?? "",
+    arguments:
+      typeof tc.function?.arguments === "string"
+        ? tc.function.arguments
+        : JSON.stringify(tc.function?.arguments ?? tc.arguments ?? {}),
+  }));
+}
+
+function inboxSummaryFromResults(results: ToolResult[]): string | null {
+  for (const r of results) {
+    if (r.tool_name !== "check_inbox") continue;
+    try {
+      const data = JSON.parse(r.content);
+      if (data.emails && !data.error) {
+        return `📧 已读取 ${data.count ?? data.emails.length} 封邮件`;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
 /** Parse loaded messages, pairing assistant tool_calls with subsequent tool result messages. */
 function parseLoadedMessages(msgs: Message[]): DisplayMessage[] {
-  // Collect all tool result messages by their tool_call_id
   const toolResults: Record<string, ToolResult> = {};
   for (const m of msgs) {
     if (m.role === "tool" && m.tool_call_id) {
       toolResults[m.tool_call_id] = {
         tool_name: "",
         tool_call_id: m.tool_call_id,
-        content: m.content,
+        content: m.content ?? "",
       };
     }
   }
 
-  // Build display messages, skipping tool role messages (merged into assistant)
   const result: DisplayMessage[] = [];
   for (const m of msgs) {
     if (m.role === "tool") continue;
@@ -61,23 +89,13 @@ function parseLoadedMessages(msgs: Message[]): DisplayMessage[] {
     const display: DisplayMessage = {
       id: m.id,
       role: m.role,
-      content: m.content,
+      content: m.content ?? "",
+      expandTools: true,
     };
 
     if (m.tool_calls) {
       try {
-        const raw = JSON.parse(m.tool_calls);
-        display.toolCalls = raw.map((tc: any, idx: number) => ({
-          index: tc.index ?? idx,
-          id: tc.id ?? "",
-          function_name: tc.function?.name ?? tc.function_name ?? "",
-          arguments:
-            typeof tc.function?.arguments === "string"
-              ? tc.function.arguments
-              : JSON.stringify(tc.function?.arguments ?? tc.arguments ?? {}),
-        }));
-
-        // Pair matching tool results
+        display.toolCalls = parseToolCalls(m.tool_calls);
         const tcs = display.toolCalls!;
         const matched: ToolResult[] = [];
         for (const tc of tcs) {
@@ -90,9 +108,29 @@ function parseLoadedMessages(msgs: Message[]): DisplayMessage[] {
           display.toolResults = matched;
         }
 
-        if (!display.content && tcs.length > 0) {
-          const names = tcs.map((tc) => tc.function_name).join(", ");
-          display.content = `[调用工具: ${names}]`;
+        const hasInbox = matched.some((r) => r.tool_name === "check_inbox");
+        const hasText = Boolean(display.content?.trim());
+        if (hasInbox && matched.length > 0) {
+          // UI already shows the inbox table — avoid duplicating a long LLM summary
+          const count = (() => {
+            try {
+              const r = matched.find((x) => x.tool_name === "check_inbox");
+              if (!r) return 0;
+              const data = JSON.parse(r.content);
+              return data.count ?? data.emails?.length ?? 0;
+            } catch {
+              return 0;
+            }
+          })();
+          display.content =
+            count > 0
+              ? `已加载最近 ${count} 封邮件，详见上方列表。需要我帮您查看某封详情或处理待办吗？`
+              : inboxSummaryFromResults(matched) ?? "";
+        } else if (!hasText && matched.length > 0) {
+          const summary = inboxSummaryFromResults(matched);
+          display.content = summary ?? "";
+        } else if (!hasText && tcs.length > 0 && matched.length === 0) {
+          display.content = `[调用工具: ${tcs.map((tc) => tc.function_name).join(", ")}]`;
         }
       } catch {
         // ignore parse errors
@@ -197,7 +235,9 @@ export default function ChatView({ conversationId }: Props) {
         ];
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantMsg.id ? { ...m, toolResults: tempToolResults } : m
+            m.id === assistantMsg.id
+              ? { ...m, toolResults: tempToolResults, expandTools: true }
+              : m
           )
         );
       } else if (event.type === "error") {
@@ -209,10 +249,12 @@ export default function ChatView({ conversationId }: Props) {
           )
         );
       } else if (event.type === "done") {
+        const finalContent =
+          tempContent.trim() || "抱歉，未能生成回复，请再试一次。";
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsg.id
-              ? { ...m, isStreaming: false, content: tempContent }
+              ? { ...m, isStreaming: false, content: finalContent }
               : m
           )
         );

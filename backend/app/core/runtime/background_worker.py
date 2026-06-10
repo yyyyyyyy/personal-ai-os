@@ -3,7 +3,7 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.core.runtime.kernel_instance import kernel
 from app.store.database import db
@@ -77,7 +77,7 @@ class BackgroundWorker:
             self._update_status(task_id, "failed", progress=0)
 
     def _update_status(self, task_id: str, status: str, progress: float = 0):
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         completed_at = now if status in ("completed", "failed") else None
         with db.get_db() as conn:
             conn.execute(
@@ -87,7 +87,7 @@ class BackgroundWorker:
 
     def create_task(self, user_request: str, plan: dict | None = None) -> dict:
         task_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
 
         with db.get_db() as conn:
             conn.execute(
