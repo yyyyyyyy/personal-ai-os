@@ -98,6 +98,7 @@ class DigitalLegacy:
                 category=mem.get("category", "fact"),
                 source="legacy_import",
                 confidence=float(mem.get("confidence", 0.5)),
+                actor="import",
             )
             imported["memories_imported"] += 1
 

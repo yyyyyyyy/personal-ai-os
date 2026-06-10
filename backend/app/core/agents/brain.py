@@ -34,6 +34,11 @@ You have access to tools. Use them when they would help answer the user's query.
 When using tools, briefly explain what you're doing before calling them.
 
 Current context (if available) will include the user's active goals, recent events, and relevant memories.
+Memories may appear in two sections:
+- "你告诉过我的（你的自述）" — the user's own words; treat as authoritative about themselves.
+- "系统推测（假设，非定论）" — system hypotheses with confidence scores; NOT facts about who the user is.
+Never restate a system hypothesis as a definitive statement about the user (e.g. do not say "你是…" based on a hypothesis).
+When self-report and system hypothesis conflict, defer to the user's self-report.
 Use this context to provide personalized, relevant responses."""
 
 

@@ -122,6 +122,21 @@ jobs:
           cd backend
           python scripts/check_boundary.py
 
+      - name: Meaning boundary G2 guard (authorship-aware memory presentation)
+        run: |
+          cd backend
+          python scripts/verify_meaning_boundary.py
+
+      - name: Meaning boundary G1 guard (claim authority and Agency gate)
+        run: |
+          cd backend
+          python scripts/verify_claim_authority.py
+
+      - name: Identity drift guard (Meaning Boundary at scale)
+        run: |
+          cd backend
+          python scripts/verify_identity_drift.py
+
   frontend:
     runs-on: ubuntu-latest
 

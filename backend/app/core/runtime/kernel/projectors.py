@@ -172,13 +172,43 @@ def _on_approval_resolved(event: Event, conn) -> None:
 _OWNED_TABLES["memory"] = ["memories"]
 
 
+def origin_from_actor(actor: str) -> str:
+    """Map event actor to memory origin (Meaning Boundary G2).
+
+    Only explicit user-authored events are self_report; everything else is claim.
+    """
+    if actor == "user":
+        return "self_report"
+    return "claim"
+
+
+def initial_claim_status(origin: str) -> str | None:
+    """Meaning Boundary G1: claims start proposed; self-reports skip Authority."""
+    return "proposed" if origin == "claim" else None
+
+
+def _set_claim_status_if_claim(conn, memory_id: str, status: str) -> None:
+    """Apply epistemic status only to origin=claim rows."""
+    row = conn.execute(
+        "SELECT origin FROM memories WHERE id = ?", (memory_id,)
+    ).fetchone()
+    if row and row["origin"] == "claim":
+        conn.execute(
+            "UPDATE memories SET claim_status = ? WHERE id = ?",
+            (status, memory_id),
+        )
+
+
 @projector("MemoryDerived")
 def _on_memory_derived(event: Event, conn) -> None:
     p = event.payload
+    origin = origin_from_actor(event.actor)
+    claim_status = initial_claim_status(origin)
     conn.execute(
         """INSERT OR REPLACE INTO memories
-           (id, category, content, source, embedding_id, confidence, derived_from_event, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           (id, category, content, source, embedding_id, confidence,
+            derived_from_event, created_at, origin, claim_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             event.aggregate_id,
             p.get("category", "general"),
@@ -188,6 +218,8 @@ def _on_memory_derived(event: Event, conn) -> None:
             p.get("confidence", 0.5),
             p.get("derived_from_event", event.caused_by),
             event.ts,
+            origin,
+            claim_status,
         ),
     )
 
@@ -377,10 +409,13 @@ def _on_pattern_detected(event: Event, conn) -> None:
 @projector("BeliefFormed")
 def _on_belief_formed(event: Event, conn) -> None:
     p = event.payload
+    origin = origin_from_actor(event.actor)
+    claim_status = initial_claim_status(origin)
     conn.execute(
         """INSERT OR REPLACE INTO memories
-           (id, category, content, source, embedding_id, confidence, derived_from_event, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           (id, category, content, source, embedding_id, confidence,
+            derived_from_event, created_at, origin, claim_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             event.aggregate_id,
             p.get("category", "belief"),
@@ -390,6 +425,8 @@ def _on_belief_formed(event: Event, conn) -> None:
             p.get("confidence", 0.5),
             p.get("derived_from_event", ""),
             event.ts,
+            origin,
+            claim_status,
         ),
     )
 
@@ -408,6 +445,60 @@ def _on_belief_strengthened(event: Event, conn) -> None:
 def _on_belief_revoked(event: Event, conn) -> None:
     """A belief has been contradicted by new evidence — set confidence to 0 and status to revoked."""
     conn.execute(
-        "UPDATE memories SET confidence = 0.0, status = 'revoked' WHERE id = ?",
+        """UPDATE memories SET confidence = 0.0, status = 'revoked',
+           claim_status = CASE WHEN origin = 'claim' THEN 'rejected' ELSE claim_status END
+           WHERE id = ?""",
+        (event.aggregate_id,),
+    )
+
+
+# --- Claim authority projection (Meaning Boundary G1) ------------------------
+
+
+@projector("ClaimRatified")
+def _on_claim_ratified(event: Event, conn) -> None:
+    _set_claim_status_if_claim(conn, event.aggregate_id, "ratified")
+
+
+@projector("ClaimRejected")
+def _on_claim_rejected(event: Event, conn) -> None:
+    _set_claim_status_if_claim(conn, event.aggregate_id, "rejected")
+
+
+@projector("ClaimContested")
+def _on_claim_contested(event: Event, conn) -> None:
+    _set_claim_status_if_claim(conn, event.aggregate_id, "contested")
+
+
+@projector("ClaimReleased")
+def _on_claim_released(event: Event, conn) -> None:
+    _set_claim_status_if_claim(conn, event.aggregate_id, "released")
+
+
+@projector("ClaimReopened")
+def _on_claim_reopened(event: Event, conn) -> None:
+    _set_claim_status_if_claim(conn, event.aggregate_id, "contested")
+
+
+@projector("ClaimRevised")
+def _on_claim_revised(event: Event, conn) -> None:
+    p = event.payload
+    row = conn.execute(
+        "SELECT origin FROM memories WHERE id = ?", (event.aggregate_id,)
+    ).fetchone()
+    if not row or row["origin"] != "claim":
+        return
+    updatable = ("content", "confidence")
+    fields = [k for k in updatable if k in p]
+    if fields:
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        params = [p[k] for k in fields]
+        params.append(event.aggregate_id)
+        conn.execute(
+            f"UPDATE memories SET {set_clause} WHERE id = ?",
+            params,
+        )
+    conn.execute(
+        "UPDATE memories SET claim_status = 'proposed' WHERE id = ?",
         (event.aggregate_id,),
     )

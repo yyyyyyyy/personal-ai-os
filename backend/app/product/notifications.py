@@ -3,14 +3,14 @@
 import uuid
 from datetime import UTC, datetime
 
-from app.store.database import db
+from app.store import database
 
 
 def create_notification(notif_type: str, title: str, content: str) -> dict:
     """Create a notification and return it."""
     nid = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()
-    with db.get_db() as conn:
+    with database.db.get_db() as conn:
         conn.execute(
             "INSERT INTO notifications (id, type, title, content, created_at) VALUES (?, ?, ?, ?, ?)",
             (nid, notif_type, title, content, now),

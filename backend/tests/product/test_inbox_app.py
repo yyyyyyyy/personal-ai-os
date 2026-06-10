@@ -18,7 +18,6 @@ def inbox_db(tmp_path, monkeypatch):
     monkeypatch.setattr("app.product.inbox.db", db)
     monkeypatch.setattr("app.store.database.db", db)
     monkeypatch.setattr("app.core.telemetry.event_recorder.db", db)
-    monkeypatch.setattr("app.product.notifications.db", db)
     return db
 
 

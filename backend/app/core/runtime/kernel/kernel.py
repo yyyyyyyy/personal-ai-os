@@ -88,6 +88,16 @@ class Kernel:
                 conn.execute("ALTER TABLE memories ADD COLUMN status TEXT DEFAULT 'active'")
             except Exception:
                 pass
+            try:
+                conn.execute(
+                    "ALTER TABLE memories ADD COLUMN origin TEXT DEFAULT 'claim'"
+                )
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE memories ADD COLUMN claim_status TEXT")
+            except Exception:
+                pass
 
     # --- Truth layer ---------------------------------------------------------
 
@@ -445,6 +455,8 @@ class Kernel:
     def _query_memories(self, filters: dict[str, Any]) -> list[dict]:
         memory_id = filters.get("id")
         category = filters.get("category")
+        origin = filters.get("origin")
+        claim_status = filters.get("claim_status")
         confidence_gt = filters.get("confidence_gt")
         confidence_lt = filters.get("confidence_lt")
         decay_eligible = filters.get("decay_eligible")
@@ -462,6 +474,12 @@ class Kernel:
             if category is not None:
                 clauses.append("category = ?")
                 params.append(category)
+            if origin is not None:
+                clauses.append("origin = ?")
+                params.append(origin)
+            if claim_status is not None:
+                clauses.append("claim_status = ?")
+                params.append(claim_status)
             if confidence_gt is not None:
                 clauses.append("confidence > ?")
                 params.append(confidence_gt)

@@ -45,6 +45,7 @@ class ReviewEngine:
                     f"目标「{g['title']}」已停滞超过3天，需要重新评估或采取行动",
                     category="fact",
                     source=f"daily_review_{date}",
+                    actor="kernel",
                 )
 
         return review_id
