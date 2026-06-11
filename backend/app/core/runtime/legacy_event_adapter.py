@@ -24,6 +24,7 @@ _LEGACY_TYPE: dict[str, str] = {
     "TaskFailed": "task_failed",
     "TaskStatusChanged": "task_status_changed",
     "MemoryDerived": "memory_derived",
+    "ConversationRecorded": "conversation",
 }
 
 _LEGACY_TO_KERNEL: dict[str, list[str]] = {}
@@ -31,7 +32,9 @@ for _kernel_type, _legacy_type in _LEGACY_TYPE.items():
     _LEGACY_TO_KERNEL.setdefault(_legacy_type, []).append(_kernel_type)
 
 # Application-layer events still stored in legacy `events` table (W4 out of scope).
-_APPLICATION_EVENT_TYPES = frozenset({"conversation", "morning_brief"})
+# Conversation turns now use kernel ConversationRecorded (not legacy events.conversation).
+_APPLICATION_EVENT_TYPES = frozenset({"morning_brief"})
+_DEPRECATED_APPLICATION_TYPES = frozenset({"conversation"})
 
 
 def _goal_id_for(event: Event) -> str | None:
@@ -67,6 +70,8 @@ def _summary_for(event: Event) -> str:
         return f"Task {p.get('status', t)}: {event.aggregate_id}"
     if t == "MemoryDerived":
         return f"Memory derived: {str(p.get('content', ''))[:60]}"
+    if t == "ConversationRecorded":
+        return f"Conversation: {str(p.get('user_message', ''))[:60]}"
     return f"{t}: {event.aggregate_id}"
 
 
@@ -99,7 +104,12 @@ def _application_legacy_events(*, days: int, limit: int, event_type: str | None 
         return event_recorder.get_events_by_type(event_type, limit=limit)
 
     recent = event_recorder.get_recent_events(days=days, limit=limit * 2)
-    return [row for row in recent if row.get("type") in _APPLICATION_EVENT_TYPES][:limit]
+    return [
+        row
+        for row in recent
+        if row.get("type") in _APPLICATION_EVENT_TYPES
+        and row.get("type") not in _DEPRECATED_APPLICATION_TYPES
+    ][:limit]
 
 
 def goal_legacy_events(goal_id: str, *, limit: int = 20) -> list[dict]:

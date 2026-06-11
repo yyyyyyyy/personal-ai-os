@@ -123,6 +123,17 @@ export default function DashboardPage() {
     ? (((cost.total_calls - cost.failed_calls) / cost.total_calls) * 100).toFixed(1)
     : "100";
 
+  const mergedNotifications = [...liveNotifications, ...notifications].reduce<Notification[]>(
+    (acc, item) => {
+      const key = `${item.type}:${item.title}`;
+      if (!acc.some((n) => n.id === item.id || `${n.type}:${n.title}` === key)) {
+        acc.push(item);
+      }
+      return acc;
+    },
+    [],
+  ).slice(0, 8);
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-5xl mx-auto">
@@ -200,10 +211,10 @@ export default function DashboardPage() {
         {/* Proactive suggestions */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
           <h3 className="text-sm font-medium text-gray-300 mb-3">主动建议 & 通知</h3>
-          {[...liveNotifications, ...notifications].length > 0 ? (
+          {mergedNotifications.length > 0 ? (
             <div className="space-y-2">
-              {[...liveNotifications, ...notifications].slice(0, 8).map((n, i) => (
-                <div key={`${n.id}-${i}`} className="p-3 bg-gray-800/50 rounded-lg">
+              {mergedNotifications.map((n) => (
+                <div key={n.id} className="p-3 bg-gray-800/50 rounded-lg">
                   <div className="text-sm text-emerald-400">{n.title}</div>
                   <div className="text-xs text-gray-400 mt-1">{n.content}</div>
                 </div>

@@ -1,4 +1,4 @@
-.PHONY: install dev test test-backend test-frontend desktop boundary rebuild-verify meaning-verify authority-verify drift-verify belief-verify belief-quality belief-survival docker-up docker-down
+.PHONY: install dev test test-backend test-frontend desktop boundary rebuild-verify meaning-verify authority-verify drift-verify trajectory-verify identity-projection-verify identity-verify agency-verify belief-verify belief-quality belief-survival docker-up docker-down
 
 # Backend
 BACKEND_DIR := backend
@@ -47,6 +47,21 @@ authority-verify:
 
 drift-verify:
 	cd $(BACKEND_DIR) && python3 scripts/verify_identity_drift.py
+
+trajectory-verify:
+	cd $(BACKEND_DIR) && python3 scripts/verify_trajectory.py
+
+trajectory-rebuild-verify:
+	cd $(BACKEND_DIR) && python3 scripts/verify_trajectory_rebuild.py
+
+identity-projection-verify:
+	cd $(BACKEND_DIR) && python3 scripts/verify_identity_projection.py
+
+identity-verify:
+	cd $(BACKEND_DIR) && python3 scripts/verify_identity.py
+
+agency-verify:
+	cd $(BACKEND_DIR) && python3 scripts/verify_agency_surfaces.py
 
 # Pattern + Belief verification suite
 belief-verify:

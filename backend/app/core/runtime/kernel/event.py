@@ -1,6 +1,6 @@
 """Event primitive — the single immutable source of truth in the Runtime.
 
-Per RUNTIME_SPEC.md (v1.0 FROZEN), an Event is append-only, ordered (by `seq`),
+Per docs/RUNTIME_SPEC.md (v1.0 FROZEN), an Event is append-only, ordered (by `seq`),
 immutable, and replayable. State and Memory are projections derived from Events;
 the Event Log itself is the only thing that cannot be rebuilt.
 """
@@ -22,7 +22,7 @@ def _new_id() -> str:
 class Event:
     """An immutable fact. Frozen on purpose — once emitted, it never changes.
 
-    Schema mirrors RUNTIME_SPEC §1.1:
+    Schema mirrors docs/RUNTIME_SPEC.md §1.1:
         seq            global monotonic ordinal (assigned by the log, not time)
         id             unique event id
         type           e.g. GoalCreated / GoalUpdated / GoalCompleted

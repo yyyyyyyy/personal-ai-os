@@ -1,0 +1,31 @@
+# Agency Projection Surfaces — Trajectory RFC §1.5 / Identity RFC §1.3
+# Surfaces that influence what appears important today; G5 applies.
+
+version: 1
+
+surfaces:
+  - id: morning_brief
+    module: app.product.morning_brief
+    kind: agency_projection
+    rank_inputs_allowed:
+      - agency.goal.priority
+      - agency.goal.deadline
+      - agency.goal.last_activity_at
+      - agency.goal.importance
+      - agency.goal.urgency
+    rank_inputs_forbidden:
+      - meaning.claim.*
+      - meaning.belief.*
+      - meaning.trajectory.*
+
+  - id: goal_list_default_sort
+    module: app.api.goals
+    kind: agency_projection
+    rank_inputs_allowed:
+      - agency.goal.priority
+      - agency.goal.deadline
+      - agency.goal.importance
+      - agency.goal.urgency
+    rank_inputs_forbidden:
+      - meaning.claim.*
+      - meaning.belief.*

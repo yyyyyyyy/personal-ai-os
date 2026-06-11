@@ -18,8 +18,9 @@ from app.core.agents.tool_postprocess import (
     canned_summary,
     compact_for_llm,
 )
+from app.core.runtime.conversation_recorder import record_conversation_turn
 from app.core.runtime.kernel_instance import kernel
-from app.core.telemetry.event_recorder import Event, event_recorder
+from app.core.runtime.meaning_gate import gate_assistant_text
 from app.core.telemetry.telemetry import LLMCallRecord, telemetry
 
 SYSTEM_PROMPT = """You are Personal AI Runtime — a personal AI assistant that helps users manage their life, work, and goals.
@@ -263,15 +264,16 @@ class Brain:
                     }
                 break
 
-        # Step 4: Save final assistant response and record conversation event
+        # Step 4: Meaning gate + save + conversation episode
         if full_content and not canned_response_done:
+            full_content, _warnings = gate_assistant_text(full_content)
             conversation.save_assistant_message(full_content)
 
-        event_recorder.record(Event(
-            type="conversation",
-            summary=f"User message: {user_message[:100]}",
-            payload={"conversation_id": conversation.conversation_id},
-        ))
+        record_conversation_turn(
+            conversation.conversation_id,
+            user_message,
+            full_content or "",
+        )
 
         # Fire-and-forget memory extraction (no-op when Ollama unavailable).
         memory_extractor.schedule(
@@ -302,6 +304,7 @@ class Brain:
 
         content = response.choices[0].message.content or ""
         if content:
+            content, _warnings = gate_assistant_text(content)
             conversation.save_assistant_message(content)
         return content
 

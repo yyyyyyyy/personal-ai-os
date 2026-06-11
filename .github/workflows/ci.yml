@@ -94,6 +94,7 @@ jobs:
               '/api/chat/approvals/',
               '/api/goals/',
               '/api/memory/memories',
+              '/api/memory/memories/grouped',
               '/api/memory/profile',
               '/api/knowledge/documents',
               '/api/reviews/',
@@ -106,6 +107,9 @@ jobs:
               '/api/tasks/background',
               '/api/triggers/',
               '/api/inbox/',
+              '/api/trajectories/',
+              '/api/trajectories/pending-links',
+              '/api/trajectories/{trajectory_id}/identity-opt-in',
           ]
           for ep in endpoints:
               assert any(r.startswith(ep) for r in routes), f'Missing: {ep}'
@@ -136,6 +140,31 @@ jobs:
         run: |
           cd backend
           python scripts/verify_identity_drift.py
+
+      - name: Trajectory integrity (Registry symmetry + link fixture)
+        run: |
+          cd backend
+          python scripts/verify_trajectory.py
+
+      - name: Trajectory links rebuild (materialized projection)
+        run: |
+          cd backend
+          python scripts/verify_trajectory_rebuild.py
+
+      - name: Identity projection guard (Review N5 metadata)
+        run: |
+          cd backend
+          python scripts/verify_identity_projection.py
+
+      - name: Identity surfaces + narrative lint (N1–N5)
+        run: |
+          cd backend
+          python scripts/verify_identity.py
+
+      - name: Agency surface lint (G5 ranking inputs)
+        run: |
+          cd backend
+          python scripts/verify_agency_surfaces.py
 
   frontend:
     runs-on: ubuntu-latest

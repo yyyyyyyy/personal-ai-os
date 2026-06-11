@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Meaning Boundary G2 verification — authorship-aware memory presentation.
 
-Validates HUMAN_RUNTIME_CONSTITUTION.md G2:
+Validates docs/HUMAN_RUNTIME_CONSTITUTION.md G2:
   - System inferences appear as hypotheses with confidence, never bare assertions.
   - User self-reports appear without hypothesis framing.
   - origin projection survives memory rebuild.

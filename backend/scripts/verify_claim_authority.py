@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Meaning Boundary G1 verification — claim authority and Agency gate.
 
-Validates HUMAN_RUNTIME_CONSTITUTION.md G1:
+Validates docs/HUMAN_RUNTIME_CONSTITUTION.md G1:
   - Proposed claims cannot drive Agency (notifications).
   - Ratified claims can drive Agency.
   - Rejected claims stop driving Agency.

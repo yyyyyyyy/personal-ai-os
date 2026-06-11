@@ -19,6 +19,7 @@ from app.api import (
     system,
     tasks,
     telemetry_api,
+    trajectories,
     triggers,
 )
 from app.config import settings
@@ -27,7 +28,6 @@ from app.core.runtime.event_bus import event_bus
 from app.core.runtime.kernel_event_bridge import register_kernel_event_bridge
 from app.core.runtime.pattern.aggregators import pattern_aggregator
 from app.core.runtime.scheduler_v2 import init_scheduler_v2, shutdown_scheduler_v2
-from app.core.scheduler import init_scheduler, shutdown_scheduler
 
 # WebSocket connection manager for real-time notifications
 _ws_connections: list[WebSocket] = []
@@ -43,8 +43,6 @@ async def lifespan(app: FastAPI):
     # Start Pattern Aggregator (Evidence → Pattern layer)
     pattern_aggregator.start()
 
-    # Initialize both schedulers (old + v2, side by side during migration)
-    init_scheduler()
     init_scheduler_v2()
 
     # Start background worker
@@ -59,7 +57,6 @@ async def lifespan(app: FastAPI):
     await background_worker.stop()
     pattern_aggregator.stop()
     shutdown_scheduler_v2()
-    shutdown_scheduler()
     await event_bus.stop()
 
     for ws in _ws_connections:
@@ -100,6 +97,7 @@ app.include_router(approvals.router)
 app.include_router(background_tasks.router)
 app.include_router(triggers.router)
 app.include_router(inbox.router)
+app.include_router(trajectories.router)
 
 
 @app.get("/")

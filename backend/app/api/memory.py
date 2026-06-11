@@ -15,6 +15,22 @@ async def list_memories(category: str | None = None, limit: int = 50):
     return memory_engine.list_memories(category=category, limit=limit)
 
 
+@router.get("/memories/grouped")
+async def list_memories_grouped(limit: int = 100):
+    """Meaning vs self-report partition for Memory Explorer (Identity RFC)."""
+    rows = memory_engine.list_memories(limit=limit)
+    self_reports = [m for m in rows if m.get("origin") == "self_report"]
+    claims = [m for m in rows if m.get("origin") != "self_report"]
+    return {
+        "self_reports": self_reports,
+        "claims": claims,
+        "projection_note": (
+            "Claims are system interpretations (Meaning). "
+            "They are not Identity until ratified and woven into narrative."
+        ),
+    }
+
+
 @router.post("/memories")
 async def create_memory(body: dict):
     """Create a new memory manually."""

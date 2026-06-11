@@ -34,6 +34,15 @@ class Settings:
     capability_policy_path: str = os.getenv(
         "CAPABILITY_POLICY_PATH", str(BASE_DIR / "backend" / "capability_policy.json")
     )
+    trajectory_registry_path: str = os.getenv(
+        "TRAJECTORY_REGISTRY_PATH", str(BASE_DIR / "backend" / "trajectory_registry.yaml")
+    )
+    identity_surfaces_path: str = os.getenv(
+        "IDENTITY_SURFACES_PATH", str(BASE_DIR / "backend" / "identity_surfaces.yaml")
+    )
+    agency_surfaces_path: str = os.getenv(
+        "AGENCY_SURFACES_PATH", str(BASE_DIR / "backend" / "agency_surfaces.yaml")
+    )
     memory_extractor: str = os.getenv("MEMORY_EXTRACTOR", "ollama")  # ollama | cloud
     sensitive_ops_local: bool = os.getenv("SENSITIVE_OPS_LOCAL", "false").lower() == "true"
 

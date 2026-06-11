@@ -4,7 +4,7 @@ This is Kernel Space. It alone touches storage. Everything in User Space
 (agents, workflows, APIs, UI) must go through this ABI and may never read or
 write the database directly.
 
-This module implements the minimal P0 ABI from RUNTIME_SPEC.md §3.1:
+This module implements the minimal P0 ABI from docs/RUNTIME_SPEC.md §3.1:
     emit_event / read_events / subscribe_events / query_state
 plus `rebuild`, which proves the core invariant:
     State is a projection of the Event Log and can be reconstructed from it.
@@ -53,6 +53,24 @@ CREATE TRIGGER IF NOT EXISTS event_log_no_delete
     BEGIN SELECT RAISE(ABORT, 'event_log is append-only: DELETE forbidden'); END;
 """
 
+TRAJECTORY_LINKS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS trajectory_links (
+    link_id        TEXT PRIMARY KEY,
+    trajectory_id  TEXT NOT NULL,
+    event_seq      INTEGER NOT NULL,
+    claim_status   TEXT NOT NULL DEFAULT 'proposed',
+    confidence     REAL NOT NULL DEFAULT 0.5,
+    rationale      TEXT,
+    actor          TEXT NOT NULL DEFAULT 'system',
+    linked_at_seq  INTEGER,
+    linked_at      TEXT,
+    updated_at     TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_trajectory_links_trajectory
+    ON trajectory_links (trajectory_id, linked_at_seq);
+"""
+
 Subscriber = Callable[[Event], None]
 
 
@@ -71,6 +89,7 @@ class Kernel:
     def _ensure_schema(self) -> None:
         with self._db.get_db() as conn:
             conn.executescript(EVENT_LOG_SCHEMA)
+            conn.executescript(TRAJECTORY_LINKS_SCHEMA)
             # Migrate legacy memories table for derived-belief support
             try:
                 conn.execute("ALTER TABLE memories ADD COLUMN confidence REAL DEFAULT 0.5")
@@ -239,6 +258,19 @@ class Kernel:
             ).fetchall()
         return [Event.from_row(r) for r in rows]
 
+    def read_events_by_seqs(self, seqs: list[int]) -> list[Event]:
+        """Fetch events by global log sequence (kernel-space batch read)."""
+        if not seqs:
+            return []
+        unique = sorted({int(s) for s in seqs})
+        placeholders = ",".join("?" * len(unique))
+        with self._db.get_db() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM event_log WHERE seq IN ({placeholders}) ORDER BY seq ASC",
+                unique,
+            ).fetchall()
+        return [Event.from_row(r) for r in rows]
+
     def subscribe_events(
         self,
         handler: Subscriber,
@@ -295,6 +327,18 @@ class Kernel:
         if selector == "patterns":
             return self._query_patterns(filters)
         raise ValueError(f"Unknown state selector: {selector!r}")
+
+    def query_trajectory(self, trajectory_id: str) -> dict[str, Any] | None:
+        """Read Trajectory aggregate (virtual Phase 1). See docs/rfc/TRAJECTORY_RFC.md §1.3."""
+        from app.core.runtime.trajectory.engine import query_trajectory
+
+        return query_trajectory(self, trajectory_id)
+
+    def list_trajectories(self) -> list[dict[str, Any]]:
+        """List trajectories from registry YAML + TrajectoryRegistered events."""
+        from app.core.runtime.trajectory.engine import list_trajectories
+
+        return list_trajectories(self)
 
     def _query_goals(self, filters: dict[str, Any]) -> list[dict]:
         goal_id = filters.get("id")
@@ -868,6 +912,11 @@ class Kernel:
         This is the proof of the Runtime's core property: State is fully derived
         from the immutable Event Log. The Event Log itself is never touched here.
         """
+        if aggregate_type == "trajectory":
+            from app.core.runtime.trajectory.engine import rebuild_trajectory_links
+
+            return rebuild_trajectory_links(self)
+
         tables = projectors.owned_tables(aggregate_type)
         events = self.read_events(aggregate_type=aggregate_type)
         with self._db.get_db() as conn:

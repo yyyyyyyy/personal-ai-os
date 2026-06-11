@@ -15,6 +15,7 @@ GOVERNED_TABLES: frozenset[str] = frozenset({
     "memories",
     "approvals",
     "patterns",
+    "trajectory_links",
 })
 
 # Application storage (direct read/write outside Kernel ABI is allowed).
@@ -60,6 +61,10 @@ GOVERNED_SCHEMA: dict[str, frozenset[str]] = {
     "patterns": frozenset({
         "id", "pattern_type", "metric", "window_days", "statistics",
         "evidence_chain", "created_at",
+    }),
+    "trajectory_links": frozenset({
+        "link_id", "trajectory_id", "event_seq", "claim_status", "confidence",
+        "rationale", "actor", "linked_at_seq", "linked_at", "updated_at",
     }),
     "event_log": frozenset({
         "seq", "id", "type", "aggregate_type", "aggregate_id", "actor", "payload",

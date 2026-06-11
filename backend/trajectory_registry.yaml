@@ -1,0 +1,24 @@
+# Trajectory Registry — continuity hypotheses (not reality categories).
+# See docs/rfc/TRAJECTORY_RFC.md §1.1
+# Status: example fixture for verify_trajectory; not yet loaded by runtime.
+
+version: 1
+
+trajectories:
+  - id: career-entrepreneurship-2026
+    domain: career
+    description: "Career decisions related to entrepreneurship impulse (2026 arc)"
+    status: active
+    claim_status: proposed
+    parent: career
+    competing_with:
+      - career-corporate-stability-2026
+
+  - id: career-corporate-stability-2026
+    domain: career
+    description: "Staying in corporate role while evaluating alternatives"
+    status: active
+    claim_status: proposed
+    parent: career
+    competing_with:
+      - career-entrepreneurship-2026

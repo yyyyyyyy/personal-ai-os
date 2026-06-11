@@ -1,11 +1,10 @@
 """Morning Brief generator — creates a daily morning brief for the user."""
 
-import uuid
 from datetime import UTC, datetime
 
 from app.core.runtime.kernel_instance import kernel
 from app.core.telemetry.event_recorder import Event, event_recorder
-from app.store.database import db
+from app.product.notifications import create_notification, find_notification
 
 
 def generate_morning_brief() -> dict | None:
@@ -34,15 +33,12 @@ def generate_morning_brief() -> dict | None:
     if not top_priorities and not deadlines:
         return None
 
-    # Idempotent: skip if today's brief already exists
-    with db.get_db() as conn:
-        existing = conn.execute(
-            "SELECT id, title, content FROM notifications WHERE type = 'brief' AND date(created_at) = date('now') LIMIT 1"
-        ).fetchone()
-        if existing:
-            return dict(existing)
-
     title = f"晨间简报 - {now.strftime('%Y-%m-%d %A')}"
+
+    # Idempotent: skip if today's brief already exists
+    existing = find_notification("brief", title)
+    if existing:
+        return existing
 
     content_lines = ["# ☀️ 晨间简报", f"日期: {now.strftime('%Y年%m月%d日 %A')}", ""]
 
@@ -69,12 +65,7 @@ def generate_morning_brief() -> dict | None:
 
     content = "\n".join(content_lines)
 
-    notification_id = str(uuid.uuid4())
-    with db.get_db() as conn:
-        conn.execute(
-            "INSERT INTO notifications (id, type, title, content, created_at) VALUES (?, 'brief', ?, ?, ?)",
-            (notification_id, title, content, now.isoformat()),
-        )
+    notification = create_notification("brief", title, content)
 
     event_recorder.record(Event(
         type="morning_brief",
@@ -83,10 +74,7 @@ def generate_morning_brief() -> dict | None:
     ))
 
     return {
-        "id": notification_id,
-        "type": "brief",
-        "title": title,
-        "content": content,
+        **notification,
         "top_priorities": [{"title": g["title"], "deadline": g.get("deadline")} for g in top_priorities],
         "deadlines": [{"title": d["title"], "deadline": d["deadline"]} for d in deadlines],
         "stagnant": [{"title": s["title"]} for s in stagnant],

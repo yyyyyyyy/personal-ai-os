@@ -89,6 +89,9 @@ make boundary-inventory # 全仓 bypass 清单
 make boundary-strict   # 零债务模式（allowlist 非空时失败）
 make rebuild-verify    # Event Log 重建验证
 make belief-verify     # Pattern + Belief 管线验证
+make trajectory-verify # Trajectory Registry 对称性 + 链接 fixture
+make identity-projection-verify  # Review Identity Projection 元数据 (N5)
+make identity-verify             # identity_surfaces.yaml + N1–N4 叙事 lint
 ```
 
 CI 还额外运行 ruff、mypy、schema 校验、MCP 工具注册校验等，见 [.github/workflows/ci.yml](.github/workflows/ci.yml)。
@@ -150,7 +153,8 @@ User → Runtime Kernel (Event Log / State / Permissions)
          └─ Storage (SQLite + ChromaDB, 本地)
 ```
 
-架构契约与 W5 闭合性验证详见 [RUNTIME_SPEC.md](RUNTIME_SPEC.md)。
+架构契约与 W5 闭合性验证详见 [RUNTIME_SPEC.md](docs/RUNTIME_SPEC.md)。  
+认识论与轨迹理论（v0.1 Ratified）：[MEANING_ONTOLOGY](docs/rfc/MEANING_ONTOLOGY.md) · [TRAJECTORY_RFC](docs/rfc/TRAJECTORY_RFC.md) · [IDENTITY_RFC](docs/rfc/IDENTITY_RFC.md)。宪法序言见 [HUMAN_RUNTIME_CONSTITUTION.md](docs/HUMAN_RUNTIME_CONSTITUTION.md#序言--preambleepistemic-stack)。完整索引见 [docs/README.md](docs/README.md)。
 
 ## 版本
 

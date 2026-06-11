@@ -1,6 +1,13 @@
 import { create } from "zustand";
 
-export type Page = "chat" | "goals" | "inbox" | "timeline" | "dashboard";
+export type Page =
+  | "chat"
+  | "goals"
+  | "inbox"
+  | "timeline"
+  | "memories"
+  | "trajectories"
+  | "dashboard";
 
 interface AppState {
   currentPage: Page;

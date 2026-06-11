@@ -1,6 +1,6 @@
 """Projectors — turn the immutable Event Log into mutable State (materialized views).
 
-Per RUNTIME_SPEC.md: State is a *projection* of Events, never written directly.
+Per docs/RUNTIME_SPEC.md: State is a *projection* of Events, never written directly.
 A projector consumes events and materializes a read model (here: the `goals` table).
 Because the projection is fully derived, it can always be wiped and rebuilt by
 replaying the Event Log — that is the core property this slice proves.
@@ -501,4 +501,52 @@ def _on_claim_revised(event: Event, conn) -> None:
     conn.execute(
         "UPDATE memories SET claim_status = 'proposed' WHERE id = ?",
         (event.aggregate_id,),
+    )
+
+
+# --- Trajectory links projection (TRAJECTORY_RFC §1.3.2) --------------------
+
+_OWNED_TABLES["trajectory"] = ["trajectory_links"]
+
+_TRAJECTORY_LINK_STATUS = {
+    "TrajectoryLinkRatified": "ratified",
+    "TrajectoryLinkRejected": "rejected",
+    "TrajectoryLinkContested": "contested",
+    "TrajectoryLinkReleased": "released",
+    "TrajectoryLinkReopened": "contested",
+}
+
+
+@projector("TrajectoryLinked")
+def _on_trajectory_linked(event: Event, conn) -> None:
+    p = event.payload or {}
+    link_id = p.get("link_id")
+    if not link_id:
+        return
+    conn.execute(
+        """INSERT OR REPLACE INTO trajectory_links
+           (link_id, trajectory_id, event_seq, claim_status, confidence, rationale,
+            actor, linked_at_seq, linked_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            link_id,
+            event.aggregate_id,
+            int(p.get("event_seq", 0)),
+            p.get("claim_status", "proposed"),
+            float(p.get("confidence", 0.5)),
+            p.get("rationale"),
+            event.actor,
+            event.seq,
+            event.ts,
+            event.ts,
+        ),
+    )
+
+
+@projector(*_TRAJECTORY_LINK_STATUS.keys())
+def _on_trajectory_link_status(event: Event, conn) -> None:
+    status = _TRAJECTORY_LINK_STATUS[event.type]
+    conn.execute(
+        "UPDATE trajectory_links SET claim_status = ?, updated_at = ? WHERE link_id = ?",
+        (status, event.ts, event.aggregate_id),
     )

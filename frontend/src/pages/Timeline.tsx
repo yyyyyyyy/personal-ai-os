@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { listReviews, type Review } from "../api/client";
+import ProjectionBadge from "../components/ProjectionBadge";
 
 interface Event {
   id: string;
@@ -9,19 +11,9 @@ interface Event {
   payload: string | null;
 }
 
-interface Review {
-  id: string;
-  type: string;
-  period_start: string;
-  period_end: string;
-  content: string;
-  created_at: string;
-}
-
 export default function TimelinePage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [goals, setGoals] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
@@ -29,14 +21,13 @@ export default function TimelinePage() {
 
   const loadData = async () => {
     try {
-      const [eventsRes, reviewsRes, goalsRes] = await Promise.all([
-        fetch("/api/events/?days=30&limit=50"),
-        fetch("/api/reviews/?limit=10"),
-        fetch("/api/goals/?limit=50"),
-      ]);
+      const eventsRes = await fetch("/api/events/?days=30&limit=50");
       if (eventsRes.ok) setEvents(await eventsRes.json());
-      if (reviewsRes.ok) setReviews(await reviewsRes.json());
-      if (goalsRes.ok) setGoals(await goalsRes.json());
+      try {
+        setReviews(await listReviews(5));
+      } catch {
+        // reviews optional
+      }
     } catch {
       // Backend may not be running
     }
@@ -70,6 +61,13 @@ export default function TimelinePage() {
     action_status_changed: "🔄",
   };
 
+  const reviewTypeLabel = (type: string) => {
+    if (type === "daily") return "每日复盘";
+    if (type === "weekly") return "每周复盘";
+    if (type === "monthly") return "每月复盘";
+    return type;
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-3xl mx-auto">
@@ -78,16 +76,24 @@ export default function TimelinePage() {
         {reviews.length > 0 && (
           <div className="mb-8">
             <h3 className="text-sm font-semibold text-gray-400 mb-3">最近复盘</h3>
-            {reviews.slice(0, 1).map((review) => (
-              <div key={review.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-                <div className="text-xs text-gray-500 mb-2">
-                  {review.type === "daily" ? "每日复盘" : review.type === "weekly" ? "每周复盘" : "每月复盘"}
-                  {" · "}
-                  {review.period_start} ~ {review.period_end}
+            <div className="space-y-3">
+              {reviews.slice(0, 3).map((review) => (
+                <div key={review.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <span className="text-xs text-gray-500">
+                      {reviewTypeLabel(review.type)}
+                      {" · "}
+                      {review.period_start}
+                      {review.period_end !== review.period_start ? ` ~ ${review.period_end}` : ""}
+                    </span>
+                    <ProjectionBadge parsed={review.key_insights_parsed} />
+                  </div>
+                  <div className="text-sm text-gray-300 whitespace-pre-wrap line-clamp-6">
+                    {review.content.slice(0, 800)}
+                  </div>
                 </div>
-                <div className="text-sm text-gray-300 whitespace-pre-wrap">{review.content.slice(0, 500)}</div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 

@@ -1,6 +1,7 @@
-"""Event Recorder — records user actions and system events for later analysis.
+"""Event Recorder — records application-layer events for later analysis.
 
-Events feed into the Memory Engine (for memory extraction) and Review Engine (for insights).
+Conversation turns are recorded via kernel ConversationRecorded (event_log), not here.
+This module remains for morning_brief and other W4 application events.
 """
 
 import json

@@ -83,6 +83,9 @@ async def send_message(conv_id: str, body: dict):
                 conversation = ConversationManager(conversation_id=conv_id)
                 conversation.save_user_message(content)
                 conversation.save_assistant_message(result["summary"])
+                from app.core.runtime.conversation_recorder import record_conversation_turn
+
+                record_conversation_turn(conv_id, content, result["summary"])
                 yield f"data: {json.dumps({'type': 'text_delta', 'content': result['summary']})}\n\n"
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
             except Exception as e:

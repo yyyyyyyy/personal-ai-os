@@ -1,10 +1,7 @@
 """Monthly Review trigger."""
 
-import uuid
-from datetime import UTC, datetime
-
 from app.core.review_engine import review_engine
-from app.store.database import db
+from app.product.notifications import create_notification, find_notification
 
 
 def generate_monthly_review() -> dict | None:
@@ -15,14 +12,9 @@ def generate_monthly_review() -> dict | None:
     if not review:
         return None
 
-    notification_id = str(uuid.uuid4())
     title = f"每月复盘 - {review['period_start']} ~ {review['period_end']}"
-    content = review["content"][:1000]
+    existing = find_notification("review", title)
+    if existing:
+        return existing
 
-    with db.get_db() as conn:
-        conn.execute(
-            "INSERT INTO notifications (id, type, title, content, created_at) VALUES (?, 'review', ?, ?, ?)",
-            (notification_id, title, content, datetime.now(UTC).isoformat()),
-        )
-
-    return {"id": notification_id, "type": "review", "title": title, "content": content}
+    return create_notification("review", title, review["content"][:1000])

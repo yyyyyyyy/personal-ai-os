@@ -1,8 +1,4 @@
-"""Scheduler v2 — supports Cron, Event, and Dependency triggers.
-
-Extends the old scheduler.py with event-driven and dependency-driven scheduling.
-The old scheduler.py continues to run in parallel during migration.
-"""
+"""Scheduler v2 — supports Cron, Event, and Dependency triggers."""
 
 import asyncio
 import uuid
@@ -74,6 +70,14 @@ def init_scheduler_v2():
         CronTrigger(hour=21, minute=0),
         id="daily_review",
         name="每日复盘",
+        replace_existing=True,
+    )
+
+    _scheduler.add_job(
+        _run_belief_reflection,
+        CronTrigger(hour=21, minute=30),
+        id="belief_reflection",
+        name="信念反思",
         replace_existing=True,
     )
 
@@ -245,6 +249,37 @@ def _run_daily_review():
         _update_v2_last_run("daily_review")
     except Exception as e:
         print(f"Daily review error: {e}")
+
+
+def _run_belief_reflection():
+    """Patterns → LLM → BeliefFormed (projection-only, no raw events)."""
+    try:
+        from app.core.belief.belief_engine import ReflectionContext, belief_engine
+        from app.product.claim_suggestions import notify_ratified_claim_insights
+
+        patterns = kernel.query_state("patterns", window_days=14, limit=20)
+        goals = kernel.query_state("goals", status="active", limit=10)
+        memories = kernel.query_state("memories", confidence_gt=0.3, limit=20)
+
+        if not patterns:
+            print("Belief reflection skipped: no patterns available")
+            return
+
+        ctx = ReflectionContext(patterns=patterns, goals=goals, memories=memories)
+
+        loop = asyncio.new_event_loop()
+        try:
+            beliefs = loop.run_until_complete(belief_engine.reflect(ctx))
+        finally:
+            loop.close()
+
+        print(f"Belief reflection produced {len(beliefs)} beliefs")
+        notified = notify_ratified_claim_insights()
+        if notified:
+            print(f"Claim insight notifications: {notified}")
+        _update_v2_last_run("belief_reflection")
+    except Exception as e:
+        print(f"Belief reflection error: {e}")
 
 
 def _run_weekly_review():

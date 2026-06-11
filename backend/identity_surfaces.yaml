@@ -1,0 +1,50 @@
+# Identity Projection Surfaces — docs/rfc/IDENTITY_RFC.md §1.1
+# Surfaces that weave trajectories/beliefs into narrative; must not imply ratified identity.
+
+version: 1
+
+surfaces:
+  - id: daily_review
+    module: app.core.review_engine
+    kind: identity_projection
+    requires:
+      - projection_meta
+      - projection_preamble
+      - trajectory_plurality_section
+
+  - id: weekly_review
+    module: app.core.review_engine
+    kind: identity_projection
+    requires:
+      - projection_meta
+      - projection_preamble
+      - trajectory_plurality_section
+
+  - id: monthly_review
+    module: app.core.review_engine
+    kind: identity_projection
+    requires:
+      - projection_meta
+      - projection_preamble
+      - trajectory_plurality_section
+
+  - id: timeline_review_card
+    module: frontend.src.pages.Timeline
+    kind: identity_projection
+    requires:
+      - projection_badge_ui
+
+  - id: memory_explorer
+    module: frontend.src.pages.Memories
+    kind: identity_projection
+    requires:
+      - claim_self_report_partition
+      - projection_badge_ui
+
+  - id: trajectories_pending_links
+    module: frontend.src.pages.Trajectories
+    kind: trajectory_surface
+    requires:
+      - pending_links_ui
+      - projection_badge_ui
+      - competing_with_visible

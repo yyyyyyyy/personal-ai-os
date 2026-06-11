@@ -50,7 +50,7 @@ def notify_ratified_claim_insights() -> int:
         )
         create_notification(
             "claim_insight",
-            "已署名系统推断",
+            f"已署名系统推断 ({memory_id})",
             body,
         )
         created += 1
