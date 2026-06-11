@@ -12,15 +12,15 @@
 
 **为什么不同：** 大多数 AI 助手把你的数据存在它们的云上。这个项目反过来——Kernel 边界保证 Agent 永远不能直接读写你的存储，所有改动都留痕在不可变的事件日志里，你随时可以带着数据走。
 
-## 截图 / Demo
+## 截图
 
-> _占位：补充以下截图能极大提升项目可信度——_
->
-> - `docs/assets/chat-approval.png` — Chat 中的高风险操作审批弹窗
-> - `docs/assets/inbox.png` — 智能收件箱分类与摘要
-> - `docs/assets/export.png` — 一键无损导出
->
-> 录制建议：用 [asciinema](https://asciinema.org/) 或 30 秒 GIF 展示「发消息 → 工具审批 → 导出数据」主链路。
+| 对话 + 审批治理 | 目标管理 | 数据主权导出 |
+|:---:|:---:|:---:|
+| ![对话审批](docs/assets/chat-approval.png) | ![目标管理](docs/assets/goals.png) | ![一键导出](docs/assets/export.png) |
+
+**本地快速预览：** 配置 `.env` 后 `make dev`，另开终端执行 `make demo` 写入示例目标 / 记忆 / 对话（可重复执行，已存在则跳过）。
+
+截图由 `docs/assets/mock/` 下的静态页面生成，更新 UI 后可运行 `make screenshots` 重新导出 PNG。
 
 ## 环境要求
 
@@ -47,6 +47,7 @@ cp .env.example .env
 ```bash
 make install   # 安装 backend + frontend 依赖
 make dev       # 并行启动后端 (8000) 与前端 (5173)
+make demo      # （另开终端）写入示例目标 / 记忆 / 对话
 ```
 
 浏览器打开 http://localhost:5173
