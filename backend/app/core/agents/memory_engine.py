@@ -7,7 +7,6 @@ ChromaDB is a derived search index maintained by the Kernel after projection.
 
 import uuid
 
-from app.core.runtime.claim_authority import can_present
 from app.core.runtime.kernel_instance import kernel
 
 
@@ -58,47 +57,18 @@ class MemoryEngine:
                 "id": memory_id,
                 "content": row.get("content") or hit.get("content", ""),
                 "confidence": float(row.get("confidence") or 0.5),
-                "origin": row.get("origin") or "claim",
-                "claim_status": row.get("claim_status"),
             })
         return enriched
 
-    @staticmethod
-    def _claim_status_label(claim_status: str | None) -> str:
-        labels = {
-            "proposed": "待你确认",
-            "contested": "争议中",
-            "ratified": "已署名",
-        }
-        if claim_status in labels:
-            return f"[{labels[claim_status]}] "
-        return ""
-
     def format_memory_context(self, memories: list[dict]) -> str:
-        """Render memories with Meaning Boundary G2 + G1 authorship/authority framing."""
+        """Render memories for LLM context injection."""
         if not memories:
             return ""
 
-        presentable = [m for m in memories if can_present(m)]
-        self_reports = [m for m in presentable if m.get("origin") == "self_report"]
-        claims = [m for m in presentable if m.get("origin") != "self_report"]
-
-        lines: list[str] = []
-        if self_reports:
-            lines.append("## 你告诉过我的（你的自述）")
-            for i, mem in enumerate(self_reports, 1):
-                lines.append(f"{i}. {mem['content']}")
-
-        if claims:
-            lines.append("## 系统推测（假设，非定论）")
-            for i, mem in enumerate(claims, 1):
-                conf = mem.get("confidence", 0.5)
-                status_tag = self._claim_status_label(mem.get("claim_status"))
-                lines.append(
-                    f"{i}. {status_tag}[推测，置信度 {conf:.2f}] "
-                    f"系统认为可能：{mem['content']}"
-                )
-
+        lines = ["## 相关记忆"]
+        for i, mem in enumerate(memories, 1):
+            conf = mem.get("confidence", 0.5)
+            lines.append(f"{i}. [置信度 {conf:.2f}] {mem['content']}")
         return "\n".join(lines)
 
     def retrieve_context_string(self, query: str, max_memories: int = 3) -> str:

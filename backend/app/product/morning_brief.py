@@ -2,7 +2,6 @@
 
 from datetime import UTC, datetime
 
-from app.core.runtime.agency_gate import rank_active_goals_for_brief
 from app.core.runtime.kernel_instance import kernel
 from app.core.telemetry.event_recorder import Event, event_recorder
 from app.product.notifications import create_notification, find_notification
@@ -15,7 +14,9 @@ def generate_morning_brief() -> dict | None:
     """
     now = datetime.now(UTC)
 
-    goals = rank_active_goals_for_brief(kernel, limit=5)
+    goals = kernel.query_state(
+        "goals", status="active", order="importance_desc", limit=5
+    )
     stagnant = kernel.query_state(
         "goals",
         status="active",

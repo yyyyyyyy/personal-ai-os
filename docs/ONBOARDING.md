@@ -26,8 +26,6 @@ LLM_API_KEY=你的-api-key
 
 其余可保持默认。数据默认落在 `backend/data/`（SQLite + Chroma 向量目录）。
 
-> 实验特性（Trajectory / Meaning）默认关闭，无需额外配置。若要开启轨迹 API：`EXPERIMENTAL_TRAJECTORY_ENABLED=true`（需重启后端）。
-
 ## 3. 启动（二选一）
 
 ### 方式 A：Makefile（推荐）

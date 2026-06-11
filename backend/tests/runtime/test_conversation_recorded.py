@@ -9,7 +9,6 @@ os.environ.setdefault("LLM_API_KEY", "test-key")
 from app.core.runtime.conversation_recorder import record_conversation_turn
 from app.core.runtime.kernel import Kernel
 from app.core.runtime.legacy_event_adapter import to_legacy_dict
-from app.core.runtime.trajectory.engine import query_trajectory
 from app.store.database import Database
 
 
@@ -56,20 +55,3 @@ def test_legacy_adapter_maps_conversation_type(tmp_path):
     assert legacy["type"] == "conversation"
     assert "hello" in legacy["summary"]
 
-
-def test_conversation_turn_proposes_trajectory_links(tmp_path, monkeypatch):
-    from app.config import settings
-
-    monkeypatch.setattr(settings, "experimental_trajectory_enabled", True)
-
-    k = Kernel(db=Database(db_path=str(tmp_path / "conv3.db")))
-    import app.core.runtime.kernel_instance as ki
-    import app.store.database as db_mod
-
-    ki.kernel = k
-    db_mod.db = k._db
-
-    ev = record_conversation_turn("conv-3", "想辞职创业", "了解")
-    data = query_trajectory(k, "career-entrepreneurship-2026")
-    assert data and any(lnk.get("event_seq") == ev.seq for lnk in data["links"])
-    assert data["links"][0]["claim_status"] == "proposed"

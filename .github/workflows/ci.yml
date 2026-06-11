@@ -81,18 +81,13 @@ jobs:
           print(f'OK: {len(tools)} tools registered')
           "
 
-      - name: Verify API routes load (core, experimental off)
+      - name: Verify API routes load
         run: |
           cd backend
           python -c "
           import os
           os.environ['LLM_API_KEY'] = 'test-key'
-          os.environ['EXPERIMENTAL_TRAJECTORY_ENABLED'] = 'false'
-          import importlib
-          import app.config
           import app.main as main_module
-          importlib.reload(app.config)
-          importlib.reload(main_module)
           app = main_module.app
           routes = [r.path for r in app.routes if hasattr(r, 'path')]
           endpoints = [
@@ -116,9 +111,7 @@ jobs:
           ]
           for ep in endpoints:
               assert any(r.startswith(ep) for r in routes), f'Missing: {ep}'
-          traj = [r for r in routes if r.startswith('/api/trajectories')]
-          assert not traj, f'Trajectory routes should be gated off: {traj}'
-          print(f'OK: {len(endpoints)} core API modules loaded (trajectories gated)')
+          print(f'OK: {len(endpoints)} core API modules loaded')
           "
 
       - name: Verify Event Log rebuild (Runtime invariant)
@@ -145,48 +138,6 @@ jobs:
         run: |
           cd backend
           python scripts/verify_egress.py
-
-  experimental:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt
-
-      - name: Experimental Meaning/Trajectory verifies (non-blocking)
-        run: |
-          cd backend
-          make experimental-verify || true
-          python scripts/verify_claim_authority.py || true
-          python scripts/verify_trajectory_rebuild.py || true
-          python scripts/verify_identity.py || true
-
-      - name: Verify trajectory API routes when experimental enabled
-        run: |
-          cd backend
-          python -c "
-          import os
-          import importlib
-          os.environ['LLM_API_KEY'] = 'test-key'
-          os.environ['EXPERIMENTAL_TRAJECTORY_ENABLED'] = 'true'
-          import app.config
-          import app.main as main_module
-          importlib.reload(app.config)
-          importlib.reload(main_module)
-          routes = [r.path for r in main_module.app.routes if hasattr(r, 'path')]
-          for ep in ('/api/trajectories/', '/api/trajectories/pending-links'):
-              assert any(r.startswith(ep) for r in routes), f'Missing: {ep}'
-          print('OK: trajectory API routes present when experimental enabled')
-          " || true
 
   frontend:
     runs-on: ubuntu-latest

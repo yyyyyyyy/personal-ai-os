@@ -88,9 +88,8 @@ class Brain:
             if used_provider.name != self.provider.name:
                 self.client, self.provider = client, used_provider
 
-            # Collect streaming response (gated at sentence boundaries)
+            # Collect streaming response
             assistant_content = ""
-            stream_gated = ""
             tool_calls_data: list[dict] = []
             current_tool_call: dict[str, int | str] = {
                 "index": -1, "id": "", "function_name": "", "arguments": "",
@@ -103,17 +102,8 @@ class Brain:
 
                 # Text content
                 if delta.content:
-                    safe_delta = delta.content
-                    if settings.meaning_gate_enabled:
-                        from app.experimental.meaning_gate import gate_stream_delta
-
-                        stream_gated, safe_delta, _gate_warnings = gate_stream_delta(
-                            stream_gated, delta.content
-                        )
-                    else:
-                        stream_gated += delta.content
-                    assistant_content += safe_delta
-                    yield {"type": "text_delta", "content": safe_delta}
+                    assistant_content += delta.content
+                    yield {"type": "text_delta", "content": delta.content}
 
                 # Tool calls
                 if delta.tool_calls:
@@ -287,12 +277,8 @@ class Brain:
                     }
                 break
 
-        # Step 4: Meaning gate + save + conversation episode
+        # Step 4: Save + conversation episode
         if full_content and not canned_response_done:
-            if settings.meaning_gate_enabled:
-                from app.experimental.meaning_gate import gate_assistant_text
-
-                full_content, _warnings = gate_assistant_text(full_content)
             conversation.save_assistant_message(full_content)
 
         record_conversation_turn(
@@ -333,10 +319,6 @@ class Brain:
 
         content = response.choices[0].message.content or ""
         if content:
-            if settings.meaning_gate_enabled:
-                from app.experimental.meaning_gate import gate_assistant_text
-
-                content, _warnings = gate_assistant_text(content)
             conversation.save_assistant_message(content)
         return content
 

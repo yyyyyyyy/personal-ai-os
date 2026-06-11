@@ -61,23 +61,6 @@ CREATE TABLE IF NOT EXISTS projection_checkpoints (
 );
 """
 
-TRAJECTORY_LINKS_SCHEMA = """
-CREATE TABLE IF NOT EXISTS trajectory_links (
-    link_id        TEXT PRIMARY KEY,
-    trajectory_id  TEXT NOT NULL,
-    event_seq      INTEGER NOT NULL,
-    claim_status   TEXT NOT NULL DEFAULT 'proposed',
-    confidence     REAL NOT NULL DEFAULT 0.5,
-    rationale      TEXT,
-    actor          TEXT NOT NULL DEFAULT 'system',
-    linked_at_seq  INTEGER,
-    linked_at      TEXT,
-    updated_at     TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_trajectory_links_trajectory
-    ON trajectory_links (trajectory_id, linked_at_seq);
-"""
-
 MEMORIES_LEGACY_DDL = [
     "ALTER TABLE memories ADD COLUMN confidence REAL DEFAULT 0.5",
     "ALTER TABLE memories ADD COLUMN derived_from_event TEXT",
@@ -117,7 +100,6 @@ class Kernel:
 
         with self._db.get_db() as conn:
             conn.executescript(EVENT_LOG_SCHEMA)
-            conn.executescript(TRAJECTORY_LINKS_SCHEMA)
             conn.executescript(PROJECTION_CHECKPOINTS_SCHEMA)
             for stmt in MEMORIES_LEGACY_DDL:
                 try:
@@ -334,18 +316,6 @@ class Kernel:
         if selector == "patterns":
             return self._query_patterns(filters)
         raise ValueError(f"Unknown state selector: {selector!r}")
-
-    def query_trajectory(self, trajectory_id: str) -> dict[str, Any] | None:
-        """Read Trajectory aggregate (virtual Phase 1). See docs/rfc/TRAJECTORY_RFC.md §1.3."""
-        from app.core.runtime.trajectory.engine import query_trajectory
-
-        return query_trajectory(self, trajectory_id)
-
-    def list_trajectories(self) -> list[dict[str, Any]]:
-        """List trajectories from registry YAML + TrajectoryRegistered events."""
-        from app.core.runtime.trajectory.engine import list_trajectories
-
-        return list_trajectories(self)
 
     def _query_goals(self, filters: dict[str, Any]) -> list[dict]:
         goal_id = filters.get("id")
@@ -934,7 +904,6 @@ class Kernel:
         "memories",
         "approvals",
         "patterns",
-        "trajectory_links",
     )
 
     def _drop_event_log_guards(self, conn) -> None:
@@ -1006,9 +975,6 @@ class Kernel:
 
         if rebuild_projections:
             self.rebuild_all()
-            from app.core.runtime.trajectory.engine import rebuild_trajectory_links
-
-            rebuild_trajectory_links(self)
             for event in self.read_events(
                 types=["MemoryDerived", "MemoryUpdated", "MemoryDeleted", "BeliefFormed"]
             ):
@@ -1152,11 +1118,6 @@ class Kernel:
 
     def rebuild(self, aggregate_type: str) -> int:
         """Rebuild projection from Event Log (incremental when checkpoint exists)."""
-        if aggregate_type == "trajectory":
-            from app.core.runtime.trajectory.engine import rebuild_trajectory_links
-
-            return rebuild_trajectory_links(self)
-
         tables = projectors.owned_tables(aggregate_type)
         events = self.read_events(aggregate_type=aggregate_type)
         with self._db.get_db() as conn:

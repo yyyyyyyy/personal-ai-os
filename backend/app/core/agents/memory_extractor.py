@@ -74,15 +74,12 @@ class MemoryExtractor:
             fact = fact.strip()
             if not fact:
                 continue
-            memory_id = memory_engine.store_memory(
+            memory_engine.store_memory(
                 content=fact,
                 category="fact",
                 source=source,
                 actor="extractor",
             )
-            from app.core.runtime.trajectory.suggester import trajectory_suggester
-
-            trajectory_suggester.schedule_after_memory(memory_id, fact, source=source)
             stored.append(fact)
         return stored
 

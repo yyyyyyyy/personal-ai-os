@@ -12,8 +12,6 @@
 
 **为什么不同：** 大多数 AI 助手把你的数据存在它们的云上。这个项目反过来——Kernel 边界保证 Agent 永远不能直接读写你的存储，所有改动都留痕在不可变的事件日志里，你随时可以带着数据走。
 
-> **实验特性（默认关闭）：** Meaning / Trajectory / Identity 层位于 `backend/app/experimental/`，等真实用户验证后再决定去留（见 `MEANING_GATE_ENABLED` / `EXPERIMENTAL_TRAJECTORY_ENABLED`）。
-
 ## 截图 / Demo
 
 > _占位：补充以下截图能极大提升项目可信度——_
@@ -112,7 +110,6 @@ make boundary-strict   # 零债务模式（allowlist 非空时失败）
 make rebuild-verify          # Event Log 重建验证
 make export-roundtrip-verify # 无损导出/导入往返验证
 make snapshot-verify         # 投影快照增量 rebuild 验证
-make experimental-verify     # Meaning/Trajectory 实验层（非阻断）
 ```
 
 CI 还额外运行 ruff、mypy、schema 校验、MCP 工具注册校验等，见 [.github/workflows/ci.yml](.github/workflows/ci.yml)。

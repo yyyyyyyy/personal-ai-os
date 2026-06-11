@@ -226,10 +226,6 @@ def _run_belief_reflection():
             loop.close()
 
         print(f"Belief reflection produced {len(beliefs)} beliefs")
-        from app.product.claim_suggestions import notify_ratified_claim_insights
-        notified = notify_ratified_claim_insights()
-        if notified:
-            print(f"Claim insight notifications: {notified}")
         _update_last_run("belief_reflection")
         return beliefs
     except Exception as e:

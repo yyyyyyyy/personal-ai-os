@@ -15,7 +15,6 @@ GOVERNED_TABLES: frozenset[str] = frozenset({
     "memories",
     "approvals",
     "patterns",
-    "trajectory_links",
     "conversations",
     "messages",
     "projection_checkpoints",
@@ -35,6 +34,8 @@ APP_STORAGE_TABLES: frozenset[str] = frozenset({
     "triggers",
     "user_profile",
     "inbox_emails",
+    # Legacy table from prior trajectory experiment; retained by Alembic for existing DBs.
+    "trajectory_links",
 })
 
 # Expected columns for governed projection tables (PRAGMA contract).
@@ -62,10 +63,6 @@ GOVERNED_SCHEMA: dict[str, frozenset[str]] = {
     "patterns": frozenset({
         "id", "pattern_type", "metric", "window_days", "statistics",
         "evidence_chain", "created_at",
-    }),
-    "trajectory_links": frozenset({
-        "link_id", "trajectory_id", "event_seq", "claim_status", "confidence",
-        "rationale", "actor", "linked_at_seq", "linked_at", "updated_at",
     }),
     "conversations": frozenset({
         "id", "title", "summary", "created_at", "updated_at",

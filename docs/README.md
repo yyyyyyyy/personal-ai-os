@@ -12,8 +12,6 @@
 - 安全威胁模型（Prompt Injection / Egress 审计）
 - 招募真实用户验证留存（见 `USER_VALIDATION.md`）
 
-> Meaning / Trajectory / Identity 实验层代码位于 `backend/app/experimental/`，默认全部关闭，等真实用户验证后再决定去留。
-
 ## 文档
 
 | 文档 | 说明 |

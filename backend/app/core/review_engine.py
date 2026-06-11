@@ -13,13 +13,19 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from app.config import settings
+from app.core.agents.llm_router import llm_router
 from app.core.agents.memory_engine import memory_engine
+from app.core.runtime.egress.egress_gate import prepare_llm_egress
 from app.core.runtime.legacy_event_adapter import to_legacy_dict
-from app.core.runtime.projection.narrative_audit import build_narrative_audit
-from app.core.runtime.projection.narrative_polish import polish_narrative_async
 from app.core.telemetry.event_recorder import event_recorder
 
 logger = logging.getLogger(__name__)
+
+_REVIEW_POLISH_SYSTEM = (
+    "你是个人复盘助手。在保留结构与事实的前提下润色下文，使其更流畅易读。"
+    "不要添加不存在的事实。"
+)
 
 
 def _kernel():
@@ -33,18 +39,29 @@ def _db():
 
     return database.db
 
-# Identity RFC N5 — narrative is projection, not ratified identity.
-REVIEW_PROJECTION_META: dict = {
-    "projection": True,
-    "projection_type": "identity_narrative_surface",
-    "interpretive_plurality": True,
-    "not_ratified": True,
-}
 
-_PROJECTION_PREAMBLE = (
-    "> 以下为系统投影草稿（Identity Projection），不代表对你身份的认定；"
-    "竞争解释可能并存。"
-)
+async def _polish_review_async(content: str) -> str:
+    """Polish review narrative via LLM; fall back to template on error."""
+    if not settings.review_narrative_llm_enabled or not content.strip():
+        return content
+    try:
+        client, provider = llm_router.get_client()
+        messages = [
+            {"role": "system", "content": _REVIEW_POLISH_SYSTEM},
+            {"role": "user", "content": content},
+        ]
+        messages, _audit = prepare_llm_egress(messages, purpose="review_narrative")
+        response = await client.chat.completions.create(
+            model=provider.model,
+            messages=messages,  # type: ignore[arg-type]
+            temperature=0.4,
+            max_tokens=settings.llm_max_tokens,
+        )
+        polished = (response.choices[0].message.content or "").strip()
+        return polished or content
+    except Exception as exc:
+        logger.warning("review polish LLM failed: %s", exc)
+        return content
 
 
 class ReviewEngine:
@@ -214,8 +231,6 @@ class ReviewEngine:
 
         lines = [
             f"# {review_type.upper()} 复盘\n",
-            _PROJECTION_PREAMBLE,
-            "",
             period_label,
             "",
         ]
@@ -262,131 +277,26 @@ class ReviewEngine:
                 lines.append(f"- {g['title']}")
             lines.append("")
 
-        self._append_trajectory_plurality_section(lines)
-
         # Suggestions
         lines.append("## AI 建议")
-        lines.append("(将由 LLM 根据以上数据生成个性化建议；属系统假设，非身份认定)")
+        lines.append("(将由 LLM 根据以上数据生成个性化建议)")
         lines.append("")
 
         return "\n".join(lines)
 
-    def _append_trajectory_plurality_section(self, lines: list[str]) -> None:
-        """Identity RFC N4 — competing continuity interpretations remain visible."""
-        try:
-            trajectories = _kernel().list_trajectories()
-        except Exception:
-            return
-        active = [
-            t for t in trajectories
-            if t.get("status", "active") == "active"
-            and t.get("claim_status") != "released"
-        ]
-        released = [
-            t for t in trajectories
-            if t.get("status") == "released" or t.get("claim_status") == "released"
-        ]
-        if not active and not released:
-            return
-        lines.append("## 轨迹视角（连续性假说，可争议）")
-        for t in active[:8]:
-            tid = t.get("id", "")
-            desc = t.get("description", tid)
-            competing = t.get("competing_with") or []
-            opt = t.get("identity_narrative_opt_in")
-            opt_label = "已授权身份叙事" if opt else "未授权身份叙事"
-            line = f"- {tid}: {desc} [{opt_label}]"
-            if competing:
-                line += f" （竞争轨迹: {', '.join(competing[:3])}）"
-            lines.append(line)
-        if released:
-            lines.append("")
-            lines.append("### 已放下轨迹（墓碑，不再定义身份叙事）")
-            for t in released[:8]:
-                tid = t.get("id", "")
-                desc = t.get("description", tid)
-                lines.append(
-                    f"- [已放下] {tid}: {desc}（Release；结构保留，影响已解除）"
-                )
-        lines.append("")
-
     def _finalize_review_content(
         self, content: str, events: list[dict]
     ) -> str:
-        k = _kernel()
-        try:
-            trajectories = k.list_trajectories()
-        except Exception:
-            return content
-        memories = k.query_state("memories", limit=300)
-        link_seqs: dict[str, list[int]] = {}
-        for t in trajectories:
-            tid = t.get("id")
-            if not tid:
-                continue
-            try:
-                data = k.query_trajectory(tid)
-                if data:
-                    link_seqs[tid] = [
-                        int(lnk["event_seq"])
-                        for lnk in data.get("links", [])
-                        if lnk.get("event_seq") is not None
-                    ]
-            except Exception:
-                link_seqs[tid] = []
-        released_ids = {
-            t["id"]
-            for t in trajectories
-            if t.get("id")
-            and (t.get("status") == "released" or t.get("claim_status") == "released")
-        }
-        return asyncio.run(
-            polish_narrative_async(
-                content,
-                trajectories=trajectories,
-                memories=memories,
-                events=events,
-                trajectory_link_seqs=link_seqs,
-                released_trajectory_ids=released_ids,
-            )
-        )
+        del events  # reserved for future context-aware polish
+        return asyncio.run(_polish_review_async(content))
 
     def _key_insights_payload(
         self, content: str, *, surface: str, events: list[dict] | None = None
     ) -> str:
-        k = _kernel()
-        try:
-            trajectories = k.list_trajectories()
-        except Exception:
-            trajectories = []
-        memories = k.query_state("memories", limit=300)
-        link_seqs: dict[str, list[int]] = {}
-        for t in trajectories:
-            tid = t.get("id")
-            if not tid:
-                continue
-            try:
-                data = k.query_trajectory(tid)
-                if data:
-                    link_seqs[tid] = [
-                        int(lnk["event_seq"])
-                        for lnk in data.get("links", [])
-                        if lnk.get("event_seq") is not None
-                    ]
-            except Exception:
-                link_seqs[tid] = []
-        audit = build_narrative_audit(
-            content,
-            trajectories,
-            memories=memories,
-            events=events or [],
-            trajectory_link_seqs=link_seqs,
-        )
+        del events
         payload = {
-            **REVIEW_PROJECTION_META,
             "surface": surface,
             "insights": self._extract_insights(content),
-            "narrative_audit": audit,
         }
         return json.dumps(payload, ensure_ascii=False)
 

@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.config import settings
 from app.core.agents.llm_router import llm_router
 from app.product.digital_legacy import digital_legacy
 
@@ -53,7 +52,6 @@ async def system_info():
         "events": legacy_event_count,
         "memories": mem_count,
         "llm_providers": len(llm_router.list_providers()),
-        "experimental_trajectory_enabled": settings.experimental_trajectory_enabled,
     }
 
 

@@ -273,7 +273,6 @@ def _run_belief_reflection():
     """Patterns → LLM → BeliefFormed (projection-only, no raw events)."""
     try:
         from app.core.belief.belief_engine import ReflectionContext, belief_engine
-        from app.product.claim_suggestions import notify_ratified_claim_insights
 
         patterns = kernel.query_state("patterns", window_days=14, limit=20)
         goals = kernel.query_state("goals", status="active", limit=10)
@@ -292,9 +291,6 @@ def _run_belief_reflection():
             loop.close()
 
         print(f"Belief reflection produced {len(beliefs)} beliefs")
-        notified = notify_ratified_claim_insights()
-        if notified:
-            print(f"Claim insight notifications: {notified}")
         _update_v2_last_run("belief_reflection")
     except Exception as e:
         print(f"Belief reflection error: {e}")

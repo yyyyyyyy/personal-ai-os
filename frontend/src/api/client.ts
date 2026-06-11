@@ -235,9 +235,7 @@ export interface MemoryRow {
 }
 
 export interface MemoriesGrouped {
-  self_reports: MemoryRow[];
-  claims: MemoryRow[];
-  projection_note: string;
+  memories: MemoryRow[];
 }
 
 export interface SystemInfo {
@@ -245,7 +243,6 @@ export interface SystemInfo {
   messages: number;
   goals: number;
   memories: number;
-  experimental_trajectory_enabled: boolean;
 }
 
 export async function fetchSystemInfo(): Promise<SystemInfo> {
@@ -258,88 +255,6 @@ export async function listMemoriesGrouped(): Promise<MemoriesGrouped> {
   const res = await fetch(`${API_BASE}/memory/memories/grouped`);
   if (!res.ok) throw new Error("Failed to list memories");
   return res.json();
-}
-
-export async function ratifyClaim(memoryId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/memory/memories/${memoryId}/ratify`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to ratify");
-}
-
-export async function rejectClaim(memoryId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/memory/memories/${memoryId}/reject`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to reject");
-}
-
-export interface TrajectorySummary {
-  id: string;
-  domain?: string;
-  description?: string;
-  status?: string;
-  claim_status?: string;
-  competing_with?: string[];
-  identity_narrative_opt_in?: boolean;
-}
-
-export interface TrajectoryDetail {
-  trajectory_id: string;
-  registry: TrajectorySummary;
-  links: TrajectoryPendingLink[];
-  competing_with: string[];
-  events: { seq: number; type: string; payload?: Record<string, unknown> }[];
-}
-
-export interface TrajectoryPendingLink {
-  link_id: string;
-  trajectory_id: string;
-  event_seq: number;
-  claim_status?: string;
-  rationale?: string;
-  confidence?: number;
-  trajectory?: TrajectorySummary;
-}
-
-export async function listTrajectories(): Promise<{ trajectories: TrajectorySummary[] }> {
-  const res = await fetch(`${API_BASE}/trajectories`);
-  if (!res.ok) throw new Error("Failed to list trajectories");
-  return res.json();
-}
-
-export async function getTrajectory(trajectoryId: string): Promise<TrajectoryDetail> {
-  const res = await fetch(`${API_BASE}/trajectories/${encodeURIComponent(trajectoryId)}`);
-  if (!res.ok) throw new Error("Failed to get trajectory");
-  return res.json();
-}
-
-export async function listPendingTrajectoryLinks(): Promise<{ pending: TrajectoryPendingLink[] }> {
-  const res = await fetch(`${API_BASE}/trajectories/pending-links`);
-  if (!res.ok) throw new Error("Failed to list pending links");
-  return res.json();
-}
-
-export async function ratifyTrajectoryLink(linkId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/trajectories/links/${linkId}/ratify`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to ratify link");
-}
-
-export async function rejectTrajectoryLink(linkId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/trajectories/links/${linkId}/reject`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to reject link");
-}
-
-export async function optInTrajectoryIdentity(trajectoryId: string): Promise<void> {
-  const res = await fetch(
-    `${API_BASE}/trajectories/${encodeURIComponent(trajectoryId)}/identity-opt-in`,
-    { method: "POST" }
-  );
-  if (!res.ok) throw new Error("Failed to opt in trajectory identity");
-}
-
-export async function optOutTrajectoryIdentity(trajectoryId: string): Promise<void> {
-  const res = await fetch(
-    `${API_BASE}/trajectories/${encodeURIComponent(trajectoryId)}/identity-opt-out`,
-    { method: "POST" }
-  );
-  if (!res.ok) throw new Error("Failed to opt out trajectory identity");
 }
 
 // --- Approval API ---
