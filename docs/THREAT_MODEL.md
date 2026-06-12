@@ -1,6 +1,6 @@
 # Threat Model · Personal AI Runtime
 
-> 状态：**v0.1 — Draft** ｜ 底座聚焦阶段
+> 状态：**v0.9 — Active** ｜ 底座聚焦阶段
 
 ## 信任边界
 

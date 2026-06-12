@@ -2,11 +2,9 @@
 
 from pathlib import Path
 
-from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-load_dotenv(BASE_DIR / ".env")
 
 
 class Settings(BaseSettings):
@@ -82,6 +80,18 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def reset_settings() -> None:
+    """Re-create the global settings instance from current environment variables.
+
+    Call this in tests after monkeypatching env vars to get a fresh Settings
+    object that picks up the new values.  Eliminates the need for
+    importlib.reload().
+    """
+    global settings
+    settings = Settings()
+
 
 # Ensure data directories exist
 Path(settings.data_dir).mkdir(parents=True, exist_ok=True)

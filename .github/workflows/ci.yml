@@ -36,8 +36,8 @@ jobs:
       - name: Type check (mypy)
         run: |
           cd backend
-          # Kernel + Runtime + API layer; full app/ has legacy type debt outside this scope
-          mypy app/core/runtime/ app/api/ app/main.py app/core/agents/memory_engine.py app/core/agents/memory_extractor.py scripts/ --ignore-missing-imports
+          # Kernel + Runtime + API layer + Product layer; full app/ has legacy type debt outside this scope
+          mypy app/core/runtime/ app/core/agents/memory_engine.py app/core/agents/memory_extractor.py app/product/ app/api/ app/main.py scripts/ --ignore-missing-imports
 
       - name: Run tests
         run: |

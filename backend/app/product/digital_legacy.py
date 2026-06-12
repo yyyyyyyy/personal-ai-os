@@ -7,7 +7,7 @@ import shutil
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, cast
 
 from app.config import settings
 from app.core.runtime.kernel_instance import kernel as default_kernel
@@ -15,6 +15,13 @@ from app.store import database as database_module
 from app.store.database import db as default_db
 
 EXPORT_VERSION = "2.0"
+
+
+class LegacyImportResult(TypedDict):
+    version: str
+    profile_categories: int
+    goals_imported: int
+    memories_imported: int
 
 
 class DigitalLegacy:
@@ -62,7 +69,7 @@ class DigitalLegacy:
     def import_persona(self, snapshot: dict, read_only: bool = True) -> dict:
         return self.import_all(snapshot, read_only=read_only)
 
-    def import_all(self, snapshot: dict, read_only: bool = True) -> dict:
+    def import_all(self, snapshot: dict, read_only: bool = True) -> dict[str, Any]:
         """Import snapshot. Write import requires read_only=False."""
         if read_only:
             return self._validate_snapshot(snapshot)
@@ -70,7 +77,7 @@ class DigitalLegacy:
         version = snapshot.get("version", "1.1")
         if version == EXPORT_VERSION:
             return self._import_v2(snapshot)
-        return self._import_v1_legacy(snapshot)
+        return cast(dict[str, Any], self._import_v1_legacy(snapshot))
 
     def _validate_snapshot(self, snapshot: dict) -> dict:
         """Dry-run validation without writing."""
@@ -105,12 +112,12 @@ class DigitalLegacy:
             "messages_imported": chat_bootstrapped.get("messages", 0),
         }
 
-    def _import_v1_legacy(self, snapshot: dict) -> dict:
+    def _import_v1_legacy(self, snapshot: dict) -> LegacyImportResult:
         """Best-effort import for v1.1 lossy snapshots (goals/memories only)."""
         from app.core.agents.memory_engine import memory_engine
         from app.core.agents.memory_v2 import user_profile
 
-        imported = {
+        imported: LegacyImportResult = {
             "version": "1.1",
             "profile_categories": 0,
             "goals_imported": 0,

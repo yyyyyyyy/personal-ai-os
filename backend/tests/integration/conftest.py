@@ -23,7 +23,7 @@ def _make_client(tmp_path, monkeypatch, auth_token: str | None = None) -> TestCl
     import app.config
     import app.main
 
-    importlib.reload(app.config)
+    app.config.reset_settings()
     importlib.reload(app.api.system)
     importlib.reload(app.main)
 
