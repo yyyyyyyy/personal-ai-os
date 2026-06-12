@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     # --- MCP ---
     mcp_config_path: str = str(BASE_DIR / "backend" / "mcp_config.json")
     capability_policy_path: str = str(BASE_DIR / "backend" / "capability_policy.json")
+    mcp_external_enabled: bool = True
+    """Enable external MCP mesh. Set false to use builtin tools only."""
+    mcp_servers_enabled: str = "*"
+    """Comma-separated MCP server names to load, or * for all in mcp_config.json."""
+
+    # External MCP credentials (optional — servers skip connect when required keys missing)
+    brave_api_key: str = ""
+    context7_api_key: str = ""
+    github_personal_access_token: str = ""
+    tavily_api_key: str = ""
+    notion_token: str = ""
 
     # --- Memory ---
     memory_extractor: str = "ollama"

@@ -12,8 +12,8 @@ from __future__ import annotations
 import contextvars
 from typing import Any
 
-# Registered MCP tools that ingest untrusted external content (see mcp_hub).
-EXTERNAL_INGESTION_TOOLS = frozenset({
+# Builtin MCP tools that ingest untrusted external content (see mcp_hub).
+_BUILTIN_EXTERNAL_INGESTION_TOOLS = frozenset({
     "check_inbox",
     "read_inbox_email",
     "web_search",
@@ -21,6 +21,21 @@ EXTERNAL_INGESTION_TOOLS = frozenset({
     "search_and_extract",
     "open_web_page",
 })
+
+_EXTERNAL_INGESTION_DYNAMIC: set[str] = set()
+
+EXTERNAL_INGESTION_TOOLS = _BUILTIN_EXTERNAL_INGESTION_TOOLS
+
+
+def register_external_ingestion_tool(name: str) -> None:
+    _EXTERNAL_INGESTION_DYNAMIC.add(name)
+
+
+def clear_external_ingestion_tools() -> None:
+    _EXTERNAL_INGESTION_DYNAMIC.clear()
+
+
+_EXTERNAL_WRITE_DYNAMIC: set[str] = set()
 
 # Registered MCP tools in capability_policy.json "needs_user" — mutate host or exfiltrate.
 WRITE_CLASS_TOOLS = frozenset({
@@ -73,8 +88,16 @@ taint_registry = TaintRegistry()
 
 
 def is_external_ingestion_tool(name: str) -> bool:
-    return name in EXTERNAL_INGESTION_TOOLS
+    return name in _BUILTIN_EXTERNAL_INGESTION_TOOLS or name in _EXTERNAL_INGESTION_DYNAMIC
+
+
+def register_external_write_tool(name: str) -> None:
+    _EXTERNAL_WRITE_DYNAMIC.add(name)
+
+
+def clear_external_write_tools() -> None:
+    _EXTERNAL_WRITE_DYNAMIC.clear()
 
 
 def is_write_class_tool(name: str) -> bool:
-    return name in WRITE_CLASS_TOOLS
+    return name in WRITE_CLASS_TOOLS or name in _EXTERNAL_WRITE_DYNAMIC

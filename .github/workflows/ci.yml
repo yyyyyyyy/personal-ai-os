@@ -70,8 +70,8 @@ jobs:
           tools = mcp_hub.get_tool_defs_for_llm()
           expected = {'get_current_time','read_file','write_file','list_directory','search_files','web_search','fetch_url','list_calendar_events','add_calendar_event','get_upcoming_events','check_inbox','read_inbox_email','send_email','open_web_page','search_and_extract','get_clipboard','ocr_image','shell_exec','git_status','git_log','git_diff','telegram_send','telegram_updates'}
           actual = {t['function']['name'] for t in tools}
-          assert len(actual) == 23, f'Expected 23 tools, got {len(actual)}'
-          assert actual == expected, f'Mismatch: expected={expected- actual}, extra={actual - expected}'
+          assert expected <= actual, f'Missing builtin tools: {expected - actual}'
+          assert len(actual) >= 23, f'Expected at least 23 builtin tools, got {len(actual)}'
           assert mcp_hub.needs_confirmation('write_file') == True
           assert mcp_hub.needs_confirmation('send_email') == True
           assert mcp_hub.needs_confirmation('add_calendar_event') == True

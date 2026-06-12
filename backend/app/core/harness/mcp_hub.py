@@ -40,7 +40,6 @@ class MCPHub:
     def __init__(self):
         self._tools: dict[str, ToolDef] = {}
         self._register_all_tools()
-        self._load_external_servers()
 
     def _register_all_tools(self):
         self._register_time_tools()
@@ -428,53 +427,46 @@ class MCPHub:
             is_async=True,
         ))
 
-    def _load_external_servers(self) -> None:
-        """Load tools from mcp_config.json external_servers section."""
-        import os
-        from pathlib import Path
+    def register_mesh_tools(self, discovered: list) -> int:
+        """Register tools discovered from external MCP servers."""
+        from app.core.harness.mcp_mesh import mcp_mesh
+        from app.core.runtime.capability_policy import capability_policy
+        from app.core.runtime.taint import (
+            register_external_ingestion_tool,
+            register_external_write_tool,
+        )
 
-        config_path = os.getenv("MCP_CONFIG_PATH", "")
-        if not config_path or not Path(config_path).is_file():
-            from app.config import settings
-            config_path = settings.mcp_config_path
-        path = Path(config_path)
-        if not path.is_file():
-            return
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return
+        count = 0
+        for item in discovered:
+            registered_name = item.registered_name
 
-        for server in data.get("external_servers", []):
-            if not server.get("enabled", True):
-                continue
-            for tool_def in server.get("tools", []):
-                name = tool_def.get("name")
-                if not name:
-                    continue
+            async def _handler(_name: str = registered_name, **kwargs) -> str:
+                return await mcp_mesh.call_tool(_name, kwargs)
 
-                def _make_handler(tname: str, response_template: str):
-                    def handler(**kwargs) -> str:
-                        return json.dumps({
-                            "tool": tname,
-                            "server": server.get("name", "external"),
-                            "args": kwargs,
-                            "result": response_template,
-                        })
-                    return handler
-
-                template = tool_def.get("mock_response", f"External tool {name} executed")
-                self.register_tool(ToolDef(
-                    name=name,
-                    description=tool_def.get("description", f"External MCP tool: {name}"),
-                    parameters=tool_def.get("parameters", {"type": "object", "properties": {}}),
-                    handler=_make_handler(name, template),
-                    is_async=False,
-                    requires_confirmation=tool_def.get("requires_confirmation", False),
-                ))
+            self.register_tool(ToolDef(
+                name=registered_name,
+                description=item.description,
+                parameters=item.parameters,
+                handler=_handler,
+                is_async=True,
+                requires_confirmation=item.requires_confirmation,
+            ))
+            capability_policy.register_external_tool(
+                registered_name,
+                risk=item.policy_risk,
+            )
+            if item.is_ingestion:
+                register_external_ingestion_tool(registered_name)
+            if item.requires_confirmation:
+                register_external_write_tool(registered_name)
+            count += 1
+        return count
 
     def register_tool(self, tool: ToolDef):
         self._tools[tool.name] = tool
+
+    def unregister_tool(self, name: str) -> None:
+        self._tools.pop(name, None)
 
     def get_tool_defs_for_llm(self) -> list[dict]:
         return [

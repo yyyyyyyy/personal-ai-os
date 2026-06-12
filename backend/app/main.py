@@ -125,7 +125,20 @@ async def lifespan(app: FastAPI):
 
     trigger_engine.seed_builtin_triggers()
 
+    try:
+        from app.core.harness.mcp_lifecycle import start_mcp_mesh
+
+        startup_tools = await start_mcp_mesh()
+        if startup_tools:
+            logger.info("MCP mesh: %d tools ready at startup (lazy servers connect in background)", startup_tools)
+    except Exception:
+        logger.exception("MCP mesh startup failed — continuing with builtin tools only")
+
     yield
+
+    from app.core.harness.mcp_lifecycle import stop_mcp_mesh
+
+    await stop_mcp_mesh()
 
     await background_worker.stop()
     pattern_aggregator.stop()
