@@ -1,6 +1,19 @@
 """Self Improver — collects feedback and improves prompts/behavior over time.
 
 Tracks user approvals/rejections, manages prompt templates with versioning.
+
+Status: EXPERIMENTAL — not yet wired into the system. Currently unused by any
+module; the singleton is never imported outside this file.
+
+Known issues:
+  - Violates Kernel Boundary: writes directly to `activity_log` via `db.get_db()`
+    instead of emitting events through `kernel.emit_event()`.
+  - No test coverage (excluded in pyproject.toml).
+
+TODO before activation:
+  1. Refactor to use kernel.emit_event() for all writes.
+  2. Add unit tests for feedback logging and version comparison.
+  3. Wire into the scheduler or agent pipeline.
 """
 
 import json

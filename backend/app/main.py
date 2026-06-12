@@ -39,7 +39,7 @@ _ws_connections: list[WebSocket] = []
 
 # ── Auth middleware ──────────────────────────────────────────────────────────
 
-SKIP_AUTH_PATHS = frozenset({"/", "/api/system/health"})
+SKIP_AUTH_PATHS = frozenset({"/", "/api/system/health", "/docs", "/redoc", "/openapi.json"})
 WS_AUTH_PREFIX = "auth."
 _LOCALHOST_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _EXPOSED_HOSTS = frozenset({"0.0.0.0", "::"})
@@ -170,7 +170,11 @@ app.include_router(inbox.router)
 
 @app.get("/")
 async def root():
-    return {"message": "Personal AI Runtime is running", "version": "0.9.0"}
+    return {
+        "message": "Personal AI Runtime is running",
+        "version": "0.9.0",
+        "docs": "/docs",
+    }
 
 
 @app.websocket("/ws")

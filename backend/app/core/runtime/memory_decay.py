@@ -1,4 +1,12 @@
-"""Daily memory confidence decay for derived beliefs."""
+"""Daily memory confidence decay for derived beliefs.
+
+Scheduled by scheduler_v2.py to periodically decay low-confidence memories.
+Uses kernel.emit_event() correctly — respects the Kernel Boundary.
+
+Coverage note: excluded from pyproject.toml coverage threshold because this
+function is exercised indirectly via scheduler integration tests
+(test_scheduler_v2.py) rather than dedicated unit tests.
+"""
 
 from app.core.runtime.kernel_instance import kernel
 

@@ -5,14 +5,16 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "test": "vitest run --config vitest.config.js"
   },
   "dependencies": {
     "electron": "^33.0.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^25.0.0",
+    "vitest": "^4.1.8"
   },
   "build": {
     "appId": "com.personalairuntime.desktop",
