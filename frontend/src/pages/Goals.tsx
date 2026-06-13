@@ -1,77 +1,94 @@
 import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  listGoals,
+  getGoal,
+  createGoal,
+  updateGoal,
+  createGoalAction,
+  updateGoalAction,
+  createConversation,
+  ApiError,
+  type Goal,
+} from "../api/client";
+import { useErrorStore } from "../stores/errorStore";
 import { useChatStore } from "../stores/chatStore";
-
-interface Goal {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string;
-  progress: number;
-  importance: number;
-  urgency: number;
-  deadline: string | null;
-  parent_id: string | null;
-  created_at: string;
-  last_activity_at: string | null;
-  actions?: Action[];
-  events?: Event[];
-}
-
-interface Action {
-  id: string;
-  goal_id: string;
-  title: string;
-  status: string;
-  created_at: string;
-  completed_at: string | null;
-}
-
-interface Event {
-  id: string;
-  type: string;
-  summary: string;
-  timestamp: string;
-}
-
-const API = "/api/goals";
+import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import EmptyState from "../components/ui/EmptyState";
+import { Input } from "../components/ui/Input";
 
 function isStagnant(lastActivity: string | null, days: number = 3): boolean {
   if (!lastActivity) return true;
   const last = new Date(lastActivity);
   const now = new Date();
-  return (now.getTime() - last.getTime()) > days * 86400000;
+  return now.getTime() - last.getTime() > days * 86400000;
 }
 
 export default function GoalsPage() {
+  const { goalId: urlGoalId } = useParams();
+  const navigate = useNavigate();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const activeConversationId = useChatStore((s) => s.activeConversationId);
+  const addError = useErrorStore((s) => s.addError);
+  const addConversation = useChatStore((s) => s.addConversation);
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation);
+  const setPendingPrompt = useChatStore((s) => s.setPendingPrompt);
 
   useEffect(() => {
     loadGoals();
   }, []);
 
+  useEffect(() => {
+    if (urlGoalId) {
+      loadGoalById(urlGoalId);
+    } else {
+      setSelectedGoal(null);
+    }
+  }, [urlGoalId]);
+
   const loadGoals = async () => {
     try {
-      const res = await fetch(`${API}/`);
-      const data = await res.json();
+      const data = await listGoals();
       setGoals(data);
-    } catch {
-      // Backend may not be running
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "加载目标失败";
+      addError(msg, "目标");
     }
   };
 
-  const handleSelectGoal = async (goalId: string) => {
+  const loadGoalById = async (goalId: string) => {
     try {
-      const res = await fetch(`${API}/${goalId}`);
-      const data = await res.json();
+      const data = await getGoal(goalId);
       setSelectedGoal(data);
-    } catch {
-      // ignore
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "加载目标详情失败";
+      addError(msg, "目标");
+    }
+  };
+
+  const handleSelectGoal = (goalId: string) => {
+    navigate(`/goals/${goalId}`);
+  };
+
+  const handleStartChatAboutGoal = async (goal: Goal) => {
+    try {
+      const conv = await createConversation(`目标：${goal.title}`);
+      addConversation(conv);
+      setActiveConversation(conv.id);
+      const prompt = `我想讨论目标「${goal.title}」${goal.description ? `：${goal.description}` : ""}。当前进度 ${goal.progress}%，请帮我分析下一步行动。`;
+      setPendingPrompt(prompt);
+      navigate(`/chat/${conv.id}`);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "创建对话失败";
+      addError(msg, "对话");
     }
   };
 
@@ -79,61 +96,57 @@ export default function GoalsPage() {
     if (!newTitle.trim()) return;
     setLoading(true);
     try {
-      await fetch(`${API}/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle }),
-      });
+      await createGoal({ title: newTitle });
       setNewTitle("");
       setShowCreate(false);
       loadGoals();
-    } catch {
-      // ignore
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "创建目标失败";
+      addError(msg, "目标");
     }
     setLoading(false);
   };
 
   const handleUpdateStatus = async (goalId: string, status: string) => {
     try {
-      await fetch(`${API}/${goalId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
+      await updateGoal(goalId, { status });
       loadGoals();
-      if (selectedGoal?.id === goalId) handleSelectGoal(goalId);
-    } catch {
-      // ignore
+      if (selectedGoal?.id === goalId) loadGoalById(goalId);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "更新目标状态失败";
+      addError(msg, "目标");
     }
   };
 
   const handleCreateAction = async (goalId: string, title: string) => {
     if (!title.trim()) return;
     try {
-      await fetch(`${API}/${goalId}/actions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      handleSelectGoal(goalId);
+      await createGoalAction(goalId, title);
+      loadGoalById(goalId);
       loadGoals();
-    } catch {
-      // ignore
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "创建行动步骤失败";
+      addError(msg, "目标");
     }
   };
 
-  const handleToggleAction = async (goalId: string, actionId: string, currentStatus: string) => {
+  const handleToggleAction = async (
+    goalId: string,
+    actionId: string,
+    currentStatus: string
+  ) => {
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
     try {
-      await fetch(`${API}/${goalId}/actions/${actionId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      handleSelectGoal(goalId);
+      await updateGoalAction(goalId, actionId, { status: newStatus });
+      loadGoalById(goalId);
       loadGoals();
-    } catch {
-      // ignore
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "更新行动步骤失败";
+      addError(msg, "目标");
     }
   };
 
@@ -149,38 +162,39 @@ export default function GoalsPage() {
       <div className="w-80 border-r border-gray-800 overflow-y-auto shrink-0">
         <div className="p-4 border-b border-gray-800 flex items-center justify-between">
           <h2 className="text-lg font-semibold">目标</h2>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm transition-colors"
-          >
+          <Button size="sm" onClick={() => setShowCreate(true)}>
             + 新建
-          </button>
+          </Button>
         </div>
 
         {showCreate && (
           <div className="p-3 border-b border-gray-800">
-            <input
+            <Input
               autoFocus
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreateGoal()}
               placeholder="目标名称..."
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-600"
+              className="w-full"
             />
             <div className="flex gap-2 mt-2">
-              <button
+              <Button
+                size="sm"
                 onClick={handleCreateGoal}
                 disabled={loading || !newTitle.trim()}
-                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 rounded text-xs disabled:opacity-50"
               >
                 {loading ? "创建中..." : "创建"}
-              </button>
-              <button
-                onClick={() => { setShowCreate(false); setNewTitle(""); }}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs"
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setShowCreate(false);
+                  setNewTitle("");
+                }}
               >
                 取消
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -202,21 +216,37 @@ export default function GoalsPage() {
                     goal.status === "active"
                       ? "bg-emerald-500"
                       : goal.status === "completed"
-                      ? "bg-blue-500"
-                      : "bg-gray-500"
+                        ? "bg-blue-500"
+                        : "bg-gray-500"
                   } ${isStagnant(goal.last_activity_at) && goal.status === "active" ? "ring-2 ring-amber-500" : ""}`}
                 />
-                <span className="text-sm font-medium truncate flex-1">{goal.title}</span>
+                <span className="text-sm font-medium truncate flex-1">
+                  {goal.title}
+                </span>
               </div>
               {goal.deadline && (
                 <div className="text-xs text-gray-500 mt-1 ml-4">
                   截止: {new Date(goal.deadline).toLocaleDateString("zh-CN")}
                 </div>
               )}
+              <div className="mt-2 ml-4 h-1 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-600 rounded-full"
+                  style={{ width: `${Math.min(goal.progress, 100)}%` }}
+                />
+              </div>
             </div>
           ))}
           {goals.length === 0 && (
-            <p className="text-sm text-gray-500 text-center py-8">暂无目标，点击「+ 新建」创建</p>
+            <EmptyState
+              title="暂无目标"
+              description="创建第一个目标，让 AI 帮你追踪进度"
+              action={
+                <Button size="sm" onClick={() => setShowCreate(true)}>
+                  创建目标
+                </Button>
+              }
+            />
           )}
         </div>
       </div>
@@ -229,31 +259,53 @@ export default function GoalsPage() {
               <div>
                 <h2 className="text-2xl font-bold">{selectedGoal.title}</h2>
                 <div className="flex items-center gap-2 mt-2">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    selectedGoal.status === "active" ? "bg-emerald-900/50 text-emerald-400" :
-                    selectedGoal.status === "completed" ? "bg-blue-900/50 text-blue-400" :
-                    "bg-gray-700 text-gray-400"
-                  }`}>
+                  <Badge
+                    tone={
+                      selectedGoal.status === "active"
+                        ? "success"
+                        : selectedGoal.status === "completed"
+                          ? "info"
+                          : "default"
+                    }
+                  >
                     {statusLabels[selectedGoal.status] || selectedGoal.status}
-                  </span>
-                  {isStagnant(selectedGoal.last_activity_at) && selectedGoal.status === "active" && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-400">
-                      已停滞
-                    </span>
-                  )}
+                  </Badge>
+                  {isStagnant(selectedGoal.last_activity_at) &&
+                    selectedGoal.status === "active" && (
+                      <Badge tone="warning">已停滞</Badge>
+                    )}
                 </div>
+                <div className="mt-3 h-2 bg-gray-800 rounded-full overflow-hidden max-w-xs">
+                  <div
+                    className="h-full bg-emerald-600 rounded-full transition-all"
+                    style={{ width: `${Math.min(selectedGoal.progress, 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  进度 {selectedGoal.progress}%
+                </p>
               </div>
               <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => handleStartChatAboutGoal(selectedGoal)}
+                >
+                  就此目标对话
+                </Button>
                 {selectedGoal.status === "active" && (
                   <>
                     <button
-                      onClick={() => handleUpdateStatus(selectedGoal.id, "paused")}
+                      onClick={() =>
+                        handleUpdateStatus(selectedGoal.id, "paused")
+                      }
                       className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded"
                     >
                       暂停
                     </button>
                     <button
-                      onClick={() => handleUpdateStatus(selectedGoal.id, "completed")}
+                      onClick={() =>
+                        handleUpdateStatus(selectedGoal.id, "completed")
+                      }
                       className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 rounded"
                     >
                       完成
@@ -262,7 +314,9 @@ export default function GoalsPage() {
                 )}
                 {selectedGoal.status === "paused" && (
                   <button
-                    onClick={() => handleUpdateStatus(selectedGoal.id, "active")}
+                    onClick={() =>
+                      handleUpdateStatus(selectedGoal.id, "active")
+                    }
                     className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 rounded"
                   >
                     恢复
@@ -289,25 +343,40 @@ export default function GoalsPage() {
                     <input
                       type="checkbox"
                       checked={action.status === "completed"}
-                      onChange={() => handleToggleAction(selectedGoal.id, action.id, action.status)}
+                      onChange={() =>
+                        handleToggleAction(
+                          selectedGoal.id,
+                          action.id,
+                          action.status
+                        )
+                      }
                       className="w-4 h-4 rounded border-gray-600 bg-gray-700 accent-emerald-600"
                     />
-                    <span className={`text-sm flex-1 ${action.status === "completed" ? "line-through text-gray-500" : ""}`}>
+                    <span
+                      className={`text-sm flex-1 ${action.status === "completed" ? "line-through text-gray-500" : ""}`}
+                    >
                       {action.title}
                     </span>
                   </div>
                 ))}
-                <NewActionInput onAdd={(title) => handleCreateAction(selectedGoal.id, title)} />
+                <NewActionInput
+                  onAdd={(title) => handleCreateAction(selectedGoal.id, title)}
+                />
               </div>
             </div>
 
             {/* Events */}
             {selectedGoal.events && selectedGoal.events.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">相关事件</h3>
+                <h3 className="text-sm font-semibold text-gray-300 mb-3">
+                  相关事件
+                </h3>
                 <div className="space-y-2">
                   {selectedGoal.events.map((event) => (
-                    <div key={event.id} className="flex items-center gap-2 text-xs text-gray-500">
+                    <div
+                      key={event.id}
+                      className="flex items-center gap-2 text-xs text-gray-500"
+                    >
                       <span className="text-gray-600">
                         {new Date(event.timestamp).toLocaleString("zh-CN")}
                       </span>
@@ -319,9 +388,10 @@ export default function GoalsPage() {
             )}
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            选择一个目标查看详情
-          </div>
+          <EmptyState
+            title="选择一个目标"
+            description="从左侧列表选择目标查看详情与行动步骤"
+          />
         )}
       </div>
     </div>

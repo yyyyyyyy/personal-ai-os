@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import ChatView from "./ChatView";
 import { resolveApproval, sendMessage } from "../../api/client";
 
@@ -7,6 +8,10 @@ vi.mock("../../api/client", () => ({
   getMessages: vi.fn().mockResolvedValue([]),
   sendMessage: vi.fn(),
   resolveApproval: vi.fn(),
+  updateConversation: vi.fn().mockResolvedValue({ status: "ok" }),
+  listGoals: vi.fn().mockResolvedValue([]),
+  listPendingApprovals: vi.fn().mockResolvedValue([]),
+  searchMemories: vi.fn().mockResolvedValue([]),
   ApiError: class extends Error {
     status: number;
     constructor(message: string, status: number) {
@@ -15,6 +20,29 @@ vi.mock("../../api/client", () => ({
     }
   },
 }));
+
+vi.mock("../../stores/errorStore", () => ({
+  useErrorStore: (selector: (s: { addError: () => void }) => unknown) =>
+    selector({ addError: vi.fn() }),
+}));
+
+vi.mock("../../stores/chatStore", () => ({
+  useChatStore: (selector: (s: Record<string, unknown>) => unknown) =>
+    selector({
+      conversations: [],
+      updateConversationTitle: vi.fn(),
+      pendingPrompt: null,
+      setPendingPrompt: vi.fn(),
+    }),
+}));
+
+function renderChatView() {
+  return render(
+    <MemoryRouter>
+      <ChatView conversationId="test-conv-1" />
+    </MemoryRouter>
+  );
+}
 
 describe("ChatView", () => {
   beforeAll(() => {
@@ -27,7 +55,7 @@ describe("ChatView", () => {
   });
 
   it("renders input area and send button", () => {
-    render(<ChatView conversationId="test-conv-1" />);
+    renderChatView();
 
     expect(screen.getByPlaceholderText(/输入消息/)).toBeInTheDocument();
     const buttons = screen.getAllByRole("button", { name: "发送" });
@@ -35,7 +63,7 @@ describe("ChatView", () => {
   });
 
   it("disables send button when input is empty", () => {
-    render(<ChatView conversationId="test-conv-1" />);
+    renderChatView();
 
     const buttons = screen.getAllByRole("button", { name: "发送" });
     for (const button of buttons) {
@@ -58,7 +86,7 @@ describe("ChatView", () => {
       }
     );
 
-    render(<ChatView conversationId="test-conv-1" />);
+    renderChatView();
 
     const inputs = screen.getAllByPlaceholderText(/输入消息/);
     const input = inputs[inputs.length - 1];
@@ -92,7 +120,7 @@ describe("ChatView", () => {
       assistant_message: "File written.",
     });
 
-    const { container } = render(<ChatView conversationId="test-conv-1" />);
+    const { container } = renderChatView();
 
     const inputs = screen.getAllByPlaceholderText(/输入消息/);
     fireEvent.change(inputs[inputs.length - 1], {

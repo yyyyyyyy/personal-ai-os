@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react";
-import { getInboxDigest, listInboxEmails, triggerInboxPoll, type InboxEmail } from "../api/client";
+import { useNavigate } from "react-router-dom";
+import {
+  getInboxDigest,
+  listInboxEmails,
+  triggerInboxPoll,
+  createConversation,
+  ApiError,
+  type InboxEmail,
+} from "../api/client";
+import { useErrorStore } from "../stores/errorStore";
+import { useChatStore } from "../stores/chatStore";
+import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
 
 const COLUMNS: { key: string; label: string; color: string }[] = [
   { key: "important", label: "重要", color: "text-red-400" },
@@ -12,15 +24,40 @@ export default function InboxPage() {
   const [digest, setDigest] = useState<{ title?: string; content?: string; message?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [polling, setPolling] = useState(false);
+  const addError = useErrorStore((s) => s.addError);
+  const navigate = useNavigate();
+  const addConversation = useChatStore((s) => s.addConversation);
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation);
+  const setPendingPrompt = useChatStore((s) => s.setPendingPrompt);
+
+  const handleAiProcess = async (em: InboxEmail) => {
+    try {
+      const conv = await createConversation(`邮件：${em.subject.slice(0, 20)}`);
+      addConversation(conv);
+      setActiveConversation(conv.id);
+      const prompt = `请帮我处理这封邮件：\n发件人：${em.sender}\n主题：${em.subject}\n预览：${em.preview}\n分类：${em.category}\n原因：${em.reason}`;
+      setPendingPrompt(prompt);
+      navigate(`/chat/${conv.id}`);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "创建对话失败";
+      addError(msg, "对话");
+    }
+  };
 
   const load = async () => {
     setLoading(true);
     try {
-      const [items, dig] = await Promise.all([listInboxEmails(), getInboxDigest()]);
+      const [items, dig] = await Promise.all([
+        listInboxEmails(),
+        getInboxDigest(),
+      ]);
       setEmails(items);
       setDigest(dig);
-    } catch {
-      // backend may be offline
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "加载收件箱失败";
+      addError(msg, "收件箱");
     } finally {
       setLoading(false);
     }
@@ -35,6 +72,10 @@ export default function InboxPage() {
     try {
       await triggerInboxPoll();
       await load();
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "轮询邮件失败";
+      addError(msg, "收件箱");
     } finally {
       setPolling(false);
     }
@@ -50,20 +91,20 @@ export default function InboxPage() {
             <h2 className="text-2xl font-semibold text-gray-100">收件箱</h2>
             <p className="text-sm text-gray-500 mt-1">主动分类与每日摘要</p>
           </div>
-          <button
-            onClick={handlePoll}
-            disabled={polling}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 rounded-lg text-sm font-medium"
-          >
+          <Button onClick={handlePoll} disabled={polling}>
             {polling ? "轮询中..." : "立即轮询"}
-          </button>
+          </Button>
         </div>
 
         {digest && digest.content && (
-          <div className="mb-6 p-4 bg-gray-900 border border-gray-800 rounded-xl">
-            <h3 className="text-sm font-medium text-emerald-400 mb-2">{digest.title || "今日摘要"}</h3>
-            <pre className="text-xs text-gray-400 whitespace-pre-wrap font-sans">{digest.content}</pre>
-          </div>
+          <Card className="mb-6">
+            <h3 className="text-sm font-medium text-emerald-400 mb-2">
+              {digest.title || "今日摘要"}
+            </h3>
+            <pre className="text-xs text-gray-400 whitespace-pre-wrap font-sans">
+              {digest.content}
+            </pre>
+          </Card>
         )}
 
         {loading && emails.length === 0 ? (
@@ -71,7 +112,7 @@ export default function InboxPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {COLUMNS.map((col) => (
-              <div key={col.key} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <Card key={col.key} padding="sm" className="p-4">
                 <h3 className={`text-sm font-semibold mb-3 ${col.color}`}>
                   {col.label} ({byCategory(col.key).length})
                 </h3>
@@ -83,13 +124,19 @@ export default function InboxPage() {
                       {em.reason && (
                         <div className="text-xs text-gray-600 mt-2 line-clamp-2">{em.reason}</div>
                       )}
+                      <button
+                        onClick={() => handleAiProcess(em)}
+                        className="mt-2 text-xs text-emerald-500 hover:text-emerald-400"
+                      >
+                        让 AI 处理
+                      </button>
                     </div>
                   ))}
                   {byCategory(col.key).length === 0 && (
                     <p className="text-xs text-gray-600 text-center py-4">暂无</p>
                   )}
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         )}

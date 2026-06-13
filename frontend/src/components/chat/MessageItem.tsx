@@ -126,7 +126,7 @@ export default function MessageItem({ message }: Props) {
 
       {isUser && (
         <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
-          <span className="text-sm text-white font-medium">You</span>
+          <span className="text-sm text-white font-medium">你</span>
         </div>
       )}
     </div>

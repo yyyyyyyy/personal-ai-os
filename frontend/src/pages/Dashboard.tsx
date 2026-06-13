@@ -1,6 +1,7 @@
 import { type ToolSummaryItem } from "../api/client";
 import { useDashboard } from "../hooks/useDashboard";
 import { useNotifications } from "../hooks/useNotifications";
+import { toolLabel } from "../utils/toolLabels";
 
 function StatCard({ label, value, unit, color }: { label: string; value: string | number; unit?: string; color?: string }) {
   return (
@@ -37,7 +38,7 @@ function ToolBadge({ tool }: { tool: ToolSummaryItem }) {
   const color = Number(rate) >= 95 ? "#10b981" : Number(rate) >= 80 ? "#f59e0b" : "#ef4444";
   return (
     <div className="flex items-center justify-between py-2 px-3 bg-gray-800/50 rounded-lg">
-      <span className="text-sm text-gray-300">{tool.tool_name}</span>
+      <span className="text-sm text-gray-300">{toolLabel(tool.tool_name)}</span>
       <div className="flex items-center gap-3 text-xs">
         <span className="text-gray-500">{tool.total_calls} 次</span>
         <span className="text-gray-500">{(tool.avg_latency_ms || 0).toFixed(0)}ms</span>

@@ -19,6 +19,9 @@ backend/backend/
 # Node
 node_modules/
 frontend/dist/
+*.tsbuildinfo
+frontend/test-results/
+frontend/playwright-report/
 
 # IDE
 .vscode/

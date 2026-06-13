@@ -1,33 +1,56 @@
-import { type Page } from "../../stores/appStore";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  MessageSquare,
+  Target,
+  Mail,
+  Calendar,
+  Brain,
+  BarChart3,
+  BookOpen,
+  Settings,
+  Trash2,
+} from "lucide-react";
 
-const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
-  { id: "chat", label: "对话", icon: "💬" },
-  { id: "goals", label: "目标", icon: "🎯" },
-  { id: "inbox", label: "收件箱", icon: "📧" },
-  { id: "timeline", label: "时间线", icon: "📅" },
-  { id: "memories", label: "记忆", icon: "🧩" },
-  { id: "dashboard", label: "仪表盘", icon: "📊" },
+const NAV_ITEMS: {
+  path: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  matchChat?: boolean;
+}[] = [
+  { path: "/", label: "对话", icon: MessageSquare, matchChat: true },
+  { path: "/goals", label: "目标", icon: Target },
+  { path: "/inbox", label: "收件箱", icon: Mail },
+  { path: "/timeline", label: "时间线", icon: Calendar },
+  { path: "/memories", label: "记忆", icon: Brain },
+  { path: "/dashboard", label: "仪表盘", icon: BarChart3 },
+  { path: "/knowledge", label: "知识库", icon: BookOpen },
+  { path: "/settings", label: "设置", icon: Settings },
 ];
 
 interface SidebarProps {
-  currentPage: Page;
-  onNavigate: (page: Page) => void;
-  conversations: Array<{ id: string; title: string }>;
+  conversations: Array<{ id: string; title: string; summary?: string | null }>;
   activeConversationId: string | null;
   onSelectConversation: (id: string) => void;
   onNewChat: () => void;
   onDeleteChat: (id: string) => void;
+  footer?: React.ReactNode;
+}
+
+function isChatRoute(pathname: string) {
+  return pathname === "/" || pathname.startsWith("/chat/");
 }
 
 export default function Sidebar({
-  currentPage,
-  onNavigate,
   conversations,
   activeConversationId,
   onSelectConversation,
   onNewChat,
   onDeleteChat,
+  footer,
 }: SidebarProps) {
+  const location = useLocation();
+  const onChatPage = isChatRoute(location.pathname);
+
   return (
     <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
       <div className="p-4 border-b border-gray-800">
@@ -36,23 +59,32 @@ export default function Sidebar({
       </div>
 
       <nav className="px-2 py-2 border-b border-gray-800">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => onNavigate(item.id)}
-            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-1 transition-colors ${
-              currentPage === item.id
-                ? "bg-emerald-600/20 text-emerald-400"
-                : "text-gray-400 hover:bg-gray-800/50"
-            }`}
-          >
-            <span>{item.icon}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end={item.path === "/"}
+              className={({ isActive }) => {
+                const active = item.matchChat
+                  ? isChatRoute(location.pathname)
+                  : isActive;
+                return `w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-1 transition-colors ${
+                  active
+                    ? "bg-emerald-600/20 text-emerald-400"
+                    : "text-gray-400 hover:bg-gray-800/50"
+                }`;
+              }}
+            >
+              <Icon size={18} className="shrink-0" />
+              <span>{item.label}</span>
+            </NavLink>
+          );
+        })}
       </nav>
 
-      {currentPage === "chat" && (
+      {onChatPage && (
         <>
           <button
             onClick={onNewChat}
@@ -72,7 +104,16 @@ export default function Sidebar({
                     : "text-gray-400 hover:bg-gray-800/50 hover:text-gray-200"
                 }`}
               >
-                <span className="truncate text-sm">{conv.title || "New Chat"}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="truncate text-sm block">
+                    {conv.title || "新对话"}
+                  </span>
+                  {conv.summary && (
+                    <span className="truncate text-xs text-gray-600 block">
+                      {conv.summary}
+                    </span>
+                  )}
+                </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -80,10 +121,9 @@ export default function Sidebar({
                   }}
                   className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all ml-2 shrink-0"
                   title="删除对话"
+                  aria-label="删除对话"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                  </svg>
+                  <Trash2 size={14} />
                 </button>
               </div>
             ))}
@@ -93,6 +133,8 @@ export default function Sidebar({
           </div>
         </>
       )}
+
+      {footer}
 
       <div className="p-3 border-t border-gray-800 text-xs text-gray-600 text-center mt-auto">
         v0.9.0

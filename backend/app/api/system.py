@@ -60,6 +60,14 @@ async def system_info():
     }
 
 
+@router.get("/mcp-status")
+async def mcp_status():
+    """Return external MCP server connection status."""
+    from app.core.harness.mcp_mesh import mcp_mesh
+
+    return mcp_mesh.get_server_status()
+
+
 @router.post("/export")
 async def export_all_data(body: dict | None = None):
     """Export complete personal data snapshot as JSON."""

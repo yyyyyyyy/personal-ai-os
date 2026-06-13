@@ -1,6 +1,15 @@
 @import "tailwindcss";
 
 @layer base {
+  :root {
+    --color-surface-base: #030712;
+    --color-surface-raised: #111827;
+    --color-surface-overlay: #1f2937;
+    --color-primary: #059669;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+  }
+
   * {
     scrollbar-width: thin;
     scrollbar-color: #374151 transparent;

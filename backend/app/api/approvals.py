@@ -24,6 +24,11 @@ async def get_approval(approval_id: str):
 
 @router.post("/{approval_id}/approve")
 async def approve(approval_id: str):
+    """Mark approval as approved in projection only.
+
+    For chat tool execution, use POST /api/chat/approvals/{id}/resolve instead.
+    This endpoint does not invoke the capability or resume the conversation.
+    """
     result = approval_engine.approve(approval_id)
     if not result:
         raise HTTPException(status_code=404, detail="Approval not found")

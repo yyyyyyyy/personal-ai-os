@@ -134,6 +134,14 @@ export async function deleteConversation(id: string): Promise<void> {
   return request<void>(`${API_BASE}/chat/conversations/${id}`, { method: "DELETE" });
 }
 
+export async function updateConversation(
+  id: string,
+  title: string
+): Promise<{ status: string }> {
+  const url = `${API_BASE}/chat/conversations/${id}?title=${encodeURIComponent(title)}`;
+  return request<{ status: string }>(url, { method: "PATCH" });
+}
+
 export async function getMessages(convId: string): Promise<Message[]> {
   return request<Message[]>(`${API_BASE}/chat/conversations/${convId}/messages`);
 }
@@ -163,13 +171,13 @@ export async function sendMessage(
   }
 
   if (!res.ok) {
-    onError(`HTTP error: ${res.status}`);
+    onError(`请求失败 (HTTP ${res.status})`);
     return;
   }
 
   const reader = res.body?.getReader();
   if (!reader) {
-    onError("No response body");
+    onError("响应体为空");
     return;
   }
 
@@ -270,6 +278,26 @@ export async function getHealth(): Promise<HealthSnapshot> {
   return request<HealthSnapshot>(`${API_BASE}/telemetry/health`);
 }
 
+// ── Events API ──────────────────────────────────────────────────────────────
+
+export interface TimelineEvent {
+  id: string;
+  type: string;
+  summary: string;
+  timestamp: string;
+  goal_id: string | null;
+  payload: string | null;
+}
+
+export async function listEvents(
+  days = 30,
+  limit = 50
+): Promise<TimelineEvent[]> {
+  return request<TimelineEvent[]>(
+    `${API_BASE}/events/?days=${days}&limit=${limit}`
+  );
+}
+
 // ── Reviews API ─────────────────────────────────────────────────────────────
 
 export interface KeyInsightsParsed {
@@ -291,6 +319,79 @@ export interface Review {
 
 export async function listReviews(limit = 10): Promise<Review[]> {
   return request<Review[]>(`${API_BASE}/reviews/?limit=${limit}`);
+}
+
+export async function triggerMorningBrief(): Promise<{
+  status: string;
+  result: string | Record<string, unknown>;
+}> {
+  return request(`${API_BASE}/reviews/trigger/morning-brief`, { method: "POST" });
+}
+
+// ── Knowledge API ───────────────────────────────────────────────────────────
+
+export interface KnowledgeDocument {
+  id: string;
+  title: string;
+  file_path?: string;
+  chunk_count: number;
+  created_at: string;
+}
+
+export async function listKnowledgeDocuments(): Promise<KnowledgeDocument[]> {
+  return request<KnowledgeDocument[]>(`${API_BASE}/knowledge/documents`);
+}
+
+export async function importKnowledgeDocument(body: {
+  title: string;
+  content: string;
+}): Promise<{ id: string; title: string; chunk_count: number; status: string }> {
+  return request(`${API_BASE}/knowledge/documents`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function uploadKnowledgeDocument(
+  file: File
+): Promise<{ id: string; title: string; chunk_count: number; status: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = {};
+  if (_authToken) {
+    headers["Authorization"] = `Bearer ${_authToken}`;
+  }
+  const res = await fetch(`${API_BASE}/knowledge/documents/upload`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = body.detail || "";
+    } catch {
+      // ignore
+    }
+    throw new ApiError(detail || `上传失败 (HTTP ${res.status})`, res.status);
+  }
+  return res.json();
+}
+
+export async function deleteKnowledgeDocument(
+  docId: string
+): Promise<{ status: string }> {
+  return request(`${API_BASE}/knowledge/documents/${docId}`, { method: "DELETE" });
+}
+
+export async function searchKnowledge(
+  q: string,
+  n = 5
+): Promise<{ query: string; results: Array<{ content: string; metadata?: Record<string, unknown> }> }> {
+  return request(
+    `${API_BASE}/knowledge/search?q=${encodeURIComponent(q)}&n=${n}`
+  );
 }
 
 // ── Memory API ──────────────────────────────────────────────────────────────
@@ -321,8 +422,76 @@ export async function fetchSystemInfo(): Promise<SystemInfo> {
   return request<SystemInfo>(`${API_BASE}/system/info`);
 }
 
+export interface LlmProvidersResponse {
+  providers: Array<{ name: string; model?: string; available?: boolean }>;
+  default: string;
+}
+
+export async function getLlmProviders(): Promise<LlmProvidersResponse> {
+  return request<LlmProvidersResponse>(`${API_BASE}/system/llm-providers`);
+}
+
+export interface McpServerStatus {
+  name: string;
+  status: string;
+  tool_count: number;
+  reason?: string;
+  startup_connect?: boolean;
+}
+
+export interface McpStatusResponse {
+  enabled: boolean;
+  servers: McpServerStatus[];
+  total_tools: number;
+}
+
+export async function getMcpStatus(): Promise<McpStatusResponse> {
+  return request<McpStatusResponse>(`${API_BASE}/system/mcp-status`);
+}
+
+export async function exportData(): Promise<Record<string, unknown>> {
+  return request(`${API_BASE}/system/export`, {
+    method: "POST",
+    body: JSON.stringify({ confirm: "EXPORT_ALL_DATA" }),
+  });
+}
+
+export async function importData(
+  data: Record<string, unknown>,
+  readOnly = false
+): Promise<Record<string, unknown>> {
+  const body: Record<string, unknown> = { data, read_only: readOnly };
+  if (!readOnly) {
+    body.confirm = "DESTROY_AND_IMPORT";
+  }
+  return request(`${API_BASE}/system/import`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export async function listMemoriesGrouped(): Promise<MemoriesGrouped> {
   return request<MemoriesGrouped>(`${API_BASE}/memory/memories/grouped`);
+}
+
+export async function searchMemories(q: string, n = 5): Promise<MemoryRow[]> {
+  return request<MemoryRow[]>(
+    `${API_BASE}/memory/memories/search?q=${encodeURIComponent(q)}&n=${n}`
+  );
+}
+
+export async function createMemory(body: {
+  content: string;
+  category?: string;
+}): Promise<{ id: string; status: string }> {
+  return request(`${API_BASE}/memory/memories`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteMemory(memoryId: string): Promise<{ status: string }> {
+  return request(`${API_BASE}/memory/memories/${memoryId}`, { method: "DELETE" });
 }
 
 // ── Inbox API ───────────────────────────────────────────────────────────────
@@ -357,6 +526,108 @@ export async function triggerInboxPoll(): Promise<Record<string, unknown>> {
 }
 
 // ── Approval API ────────────────────────────────────────────────────────────
+
+// ── Goals API ───────────────────────────────────────────────────────────────
+
+export interface GoalAction {
+  id: string;
+  goal_id: string;
+  title: string;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface GoalEvent {
+  id: string;
+  type: string;
+  summary: string;
+  timestamp: string;
+}
+
+export interface Goal {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  progress: number;
+  importance: number;
+  urgency: number;
+  deadline: string | null;
+  parent_id: string | null;
+  created_at: string;
+  last_activity_at: string | null;
+  actions?: GoalAction[];
+  events?: GoalEvent[];
+}
+
+export async function listGoals(status?: string): Promise<Goal[]> {
+  const url = status
+    ? `${API_BASE}/goals/?status=${encodeURIComponent(status)}`
+    : `${API_BASE}/goals/`;
+  return request<Goal[]>(url);
+}
+
+export async function getGoal(goalId: string): Promise<Goal> {
+  return request<Goal>(`${API_BASE}/goals/${goalId}`);
+}
+
+export async function createGoal(body: {
+  title: string;
+  description?: string;
+}): Promise<Goal> {
+  return request<Goal>(`${API_BASE}/goals/`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateGoal(
+  goalId: string,
+  body: Partial<Pick<Goal, "title" | "description" | "status" | "progress">>
+): Promise<Goal> {
+  return request<Goal>(`${API_BASE}/goals/${goalId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function createGoalAction(
+  goalId: string,
+  title: string
+): Promise<GoalAction> {
+  return request<GoalAction>(`${API_BASE}/goals/${goalId}/actions`, {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  });
+}
+
+export async function updateGoalAction(
+  goalId: string,
+  actionId: string,
+  body: { status: string }
+): Promise<GoalAction> {
+  return request<GoalAction>(`${API_BASE}/goals/${goalId}/actions/${actionId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// ── Approval API ────────────────────────────────────────────────────────────
+
+// ── Approval list API ───────────────────────────────────────────────────────
+
+export interface Approval {
+  id: string;
+  action?: string;
+  status: string;
+  params?: string;
+  created_at?: string;
+}
+
+export async function listPendingApprovals(): Promise<Approval[]> {
+  return request<Approval[]>(`${API_BASE}/approvals/?pending_only=true`);
+}
 
 export async function resolveApproval(
   approvalId: string,

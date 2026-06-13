@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useChatStore } from "./stores/chatStore";
-import { useAppStore } from "./stores/appStore";
 import { useErrorStore } from "./stores/errorStore";
 import {
   listConversations,
@@ -10,16 +10,13 @@ import {
   isAuthConfigured,
   ApiError,
 } from "./api/client";
-import ChatView from "./components/chat/ChatView";
 import Sidebar from "./components/layout/Sidebar";
-import GoalsPage from "./pages/Goals";
-import TimelinePage from "./pages/Timeline";
-import DashboardPage from "./pages/Dashboard";
-import InboxPage from "./pages/Inbox";
-import MemoriesPage from "./pages/Memories";
+import Dialog from "./components/ui/Dialog";
+import NotificationBell from "./components/layout/NotificationBell";
+import OnboardingWizard from "./components/onboarding/OnboardingWizard";
 import { useNotifications } from "./hooks/useNotifications";
 
-export default function App() {
+export default function Layout() {
   const {
     conversations,
     activeConversationId,
@@ -29,14 +26,32 @@ export default function App() {
     removeConversation,
   } = useChatStore();
 
-  const { currentPage, setPage } = useAppStore();
   const { toasts, dismissToast } = useNotifications();
   const { errors, dismissError, backendUnavailable, addError } = useErrorStore();
   const [authRequired, setAuthRequired] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => !localStorage.getItem("onboarding_done")
+  );
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     loadConversations();
   }, []);
+
+  useEffect(() => {
+    const match = location.pathname.match(/^\/chat\/([^/]+)/);
+    const convId = match?.[1] ?? null;
+    if (convId && convId !== activeConversationId) {
+      setActiveConversation(convId);
+    } else if (location.pathname === "/" && activeConversationId) {
+      setActiveConversation(null);
+    }
+  }, [location.pathname, activeConversationId, setActiveConversation]);
 
   const loadConversations = async () => {
     try {
@@ -62,34 +77,48 @@ export default function App() {
       const conv = await createConversation();
       addConversation(conv);
       setActiveConversation(conv.id);
-      setPage("chat");
+      navigate(`/chat/${conv.id}`);
     } catch (e) {
       addError(e instanceof ApiError ? e.message : "创建对话失败", "对话");
     }
   };
 
-  const handleDeleteChat = async (id: string) => {
+  const handleDeleteChat = (id: string) => {
+    const conv = conversations.find((c) => c.id === id);
+    setDeleteTarget({ id, title: conv?.title || "新对话" });
+  };
+
+  const confirmDeleteChat = async () => {
+    if (!deleteTarget) return;
+    const { id } = deleteTarget;
+    setDeleteTarget(null);
     try {
       await deleteConversation(id);
       removeConversation(id);
+      if (activeConversationId === id) {
+        navigate("/");
+      }
     } catch (e) {
       addError(e instanceof ApiError ? e.message : "删除对话失败", "对话");
     }
   };
 
+  const handleSelectConversation = (id: string) => {
+    setActiveConversation(id);
+    navigate(`/chat/${id}`);
+  };
+
   return (
     <div className="flex h-screen bg-gray-950 text-gray-100">
       <Sidebar
-        currentPage={currentPage}
-        onNavigate={setPage}
         conversations={conversations}
         activeConversationId={activeConversationId}
-        onSelectConversation={setActiveConversation}
+        onSelectConversation={handleSelectConversation}
         onNewChat={handleNewChat}
         onDeleteChat={handleDeleteChat}
+        footer={<NotificationBell />}
       />
 
-      {/* Auth not configured banner */}
       {authRequired && !isAuthConfigured() && (
         <div className="fixed top-0 left-64 right-0 z-50 bg-amber-900/50 border-b border-amber-700/50 px-4 py-2 text-center">
           <span className="text-amber-300 text-sm">
@@ -98,7 +127,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Backend unavailable banner */}
       {backendUnavailable && (
         <div className="fixed top-0 left-64 right-0 z-50 bg-red-900/50 border-b border-red-700/50 px-4 py-2 text-center">
           <span className="text-red-400 text-sm">
@@ -107,7 +135,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
         {toasts.map((t) => (
           <div
@@ -133,34 +160,27 @@ export default function App() {
         ))}
       </div>
 
-      {/* Main content */}
       <main className="flex-1 flex flex-col min-w-0">
-        {currentPage === "chat" &&
-          (activeConversationId ? (
-            <ChatView conversationId={activeConversationId} />
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-6xl mb-4">🧠</div>
-                <h2 className="text-2xl font-semibold text-gray-300 mb-2">
-                  Personal AI Runtime
-                </h2>
-                <p className="text-gray-500 mb-6">点击「新对话」开始，或选择一个已有对话</p>
-                <button
-                  onClick={handleNewChat}
-                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-white font-medium transition-colors"
-                >
-                  开始新对话
-                </button>
-              </div>
-            </div>
-          ))}
-        {currentPage === "goals" && <GoalsPage />}
-        {currentPage === "inbox" && <InboxPage />}
-        {currentPage === "timeline" && <TimelinePage />}
-        {currentPage === "memories" && <MemoriesPage />}
-        {currentPage === "dashboard" && <DashboardPage />}
+        <Outlet />
       </main>
+
+      <Dialog
+        open={!!deleteTarget}
+        title="删除对话"
+        description={
+          deleteTarget
+            ? `确定删除对话「${deleteTarget.title}」？此操作不可撤销。`
+            : undefined
+        }
+        confirmLabel="删除"
+        variant="danger"
+        onConfirm={confirmDeleteChat}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      {showOnboarding && (
+        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
+      )}
     </div>
   );
 }

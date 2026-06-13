@@ -313,5 +313,56 @@ class MCPMesh:
         self._discovered.extend(discovered)
         return discovered
 
+    def get_server_status(self) -> dict:
+        """Return connection status for external MCP servers."""
+        from app.core.harness.mcp_config import load_external_server_configs, mcp_external_enabled
+
+        if not mcp_external_enabled():
+            return {
+                "enabled": False,
+                "servers": [],
+                "total_tools": 0,
+            }
+
+        connected = set(self._connections.keys())
+        servers = []
+        for config in load_external_server_configs():
+            if not config.is_available():
+                servers.append({
+                    "name": config.name,
+                    "status": "unavailable",
+                    "reason": "missing_env",
+                    "tool_count": 0,
+                })
+                continue
+            if config.name in connected:
+                conn = self._connections[config.name]
+                servers.append({
+                    "name": config.name,
+                    "status": "connected",
+                    "tool_count": len(conn.tools),
+                    "startup_connect": config.startup_connect,
+                })
+            elif config.name in self._pending_configs:
+                servers.append({
+                    "name": config.name,
+                    "status": "lazy",
+                    "tool_count": 0,
+                    "startup_connect": config.startup_connect,
+                })
+            else:
+                servers.append({
+                    "name": config.name,
+                    "status": "disconnected",
+                    "tool_count": 0,
+                    "startup_connect": config.startup_connect,
+                })
+
+        return {
+            "enabled": True,
+            "servers": servers,
+            "total_tools": len(self._discovered),
+        }
+
 
 mcp_mesh = MCPMesh()

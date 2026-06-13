@@ -1,18 +1,41 @@
 import { useState, useEffect } from "react";
-import { listReviews, type Review } from "../api/client";
-
-interface Event {
-  id: string;
-  type: string;
-  summary: string;
-  timestamp: string;
-  goal_id: string | null;
-  payload: string | null;
-}
+import { useNavigate } from "react-router-dom";
+import {
+  listEvents,
+  listReviews,
+  ApiError,
+  type Review,
+  type TimelineEvent,
+} from "../api/client";
+import { useErrorStore } from "../stores/errorStore";
+import { useChatStore } from "../stores/chatStore";
 
 export default function TimelinePage() {
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const addError = useErrorStore((s) => s.addError);
+  const navigate = useNavigate();
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation);
+
+  const getConversationId = (event: TimelineEvent): string | null => {
+    if (!event.payload) return null;
+    try {
+      const p = JSON.parse(event.payload);
+      return p.conversation_id || p.conv_id || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleEventClick = (event: TimelineEvent) => {
+    const convId = getConversationId(event);
+    if (convId) {
+      setActiveConversation(convId);
+      navigate(`/chat/${convId}`);
+    } else if (event.goal_id) {
+      navigate(`/goals/${event.goal_id}`);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -20,15 +43,16 @@ export default function TimelinePage() {
 
   const loadData = async () => {
     try {
-      const eventsRes = await fetch("/api/events/?days=30&limit=50");
-      if (eventsRes.ok) setEvents(await eventsRes.json());
-      try {
-        setReviews(await listReviews(5));
-      } catch {
-        // reviews optional
-      }
-    } catch {
-      // Backend may not be running
+      const [eventList, reviewList] = await Promise.all([
+        listEvents(30, 50),
+        listReviews(5).catch(() => [] as Review[]),
+      ]);
+      setEvents(eventList);
+      setReviews(reviewList);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "加载时间线失败";
+      addError(msg, "时间线");
     }
   };
 
@@ -37,7 +61,7 @@ export default function TimelinePage() {
     if (!acc[date]) acc[date] = [];
     acc[date].push(event);
     return acc;
-  }, {} as Record<string, Event[]>);
+  }, {} as Record<string, TimelineEvent[]>);
 
   const sortedDates = Object.keys(groupedByDate).sort().reverse();
 
@@ -116,7 +140,12 @@ export default function TimelinePage() {
                   {groupedByDate[date].map((event) => (
                     <div
                       key={event.id}
-                      className="flex items-start gap-3 py-2 px-3 bg-gray-900/50 rounded-lg hover:bg-gray-800/50 transition-colors"
+                      onClick={() => handleEventClick(event)}
+                      className={`flex items-start gap-3 py-2 px-3 bg-gray-900/50 rounded-lg hover:bg-gray-800/50 transition-colors ${
+                        getConversationId(event) || event.goal_id
+                          ? "cursor-pointer"
+                          : ""
+                      }`}
                     >
                       <span className="text-sm mt-0.5">{typeIcons[event.type] || "📌"}</span>
                       <div className="flex-1 min-w-0">

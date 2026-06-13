@@ -1,4 +1,5 @@
 import { toolLabel, describeToolAction } from "../../utils/toolLabels";
+import Button from "../ui/Button";
 
 interface ToolCall {
   index: number;
@@ -48,18 +49,12 @@ export default function ConfirmationDialog({ toolCall, onConfirm, onDeny }: Prop
             </pre>
           </details>
           <div className="flex gap-2">
-            <button
-              onClick={onConfirm}
-              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm font-medium transition-colors"
-            >
+            <Button size="sm" onClick={onConfirm}>
               确认执行
-            </button>
-            <button
-              onClick={onDeny}
-              className="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
-            >
+            </Button>
+            <Button size="sm" variant="secondary" onClick={onDeny}>
               取消
-            </button>
+            </Button>
           </div>
         </div>
       </div>

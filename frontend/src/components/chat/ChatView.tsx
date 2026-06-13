@@ -1,8 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { getMessages, sendMessage, resolveApproval } from "../../api/client";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  getMessages,
+  sendMessage,
+  resolveApproval,
+  updateConversation,
+  listGoals,
+  ApiError,
+} from "../../api/client";
 import type { Message, StreamEvent } from "../../api/client";
+import { useErrorStore } from "../../stores/errorStore";
+import { useChatStore } from "../../stores/chatStore";
 import MessageItem from "./MessageItem";
 import ConfirmationDialog from "./ConfirmationDialog";
+import ContextPanel from "./ContextPanel";
 
 interface Props {
   conversationId: string;
@@ -149,12 +159,70 @@ export default function ChatView({ conversationId }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const [contextOpen, setContextOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const addError = useErrorStore((s) => s.addError);
+  const updateConversationTitle = useChatStore((s) => s.updateConversationTitle);
+  const conversations = useChatStore((s) => s.conversations);
+  const pendingPrompt = useChatStore((s) => s.pendingPrompt);
+  const setPendingPrompt = useChatStore((s) => s.setPendingPrompt);
+
+  const adjustTextareaHeight = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, []);
+
+  useEffect(() => {
+    if (pendingPrompt) {
+      setInput(pendingPrompt);
+      setPendingPrompt(null);
+      adjustTextareaHeight();
+    }
+  }, [pendingPrompt, setPendingPrompt, adjustTextareaHeight]);
+
+  const lastUserMessage = useMemo(() => {
+    const userMsgs = messages.filter((m) => m.role === "user");
+    return userMsgs.length > 0 ? userMsgs[userMsgs.length - 1].content : undefined;
+  }, [messages]);
+
+  const allToolResults = useMemo(
+    () => messages.flatMap((m) => m.toolResults || []),
+    [messages]
+  );
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [input, adjustTextareaHeight]);
 
   useEffect(() => {
     loadMessages();
+    loadSuggestions();
   }, [conversationId]);
+
+  const loadSuggestions = async () => {
+    try {
+      const goals = await listGoals();
+      const stagnant = goals.filter((g) => {
+        if (g.status !== "active") return false;
+        if (!g.last_activity_at) return true;
+        const last = new Date(g.last_activity_at);
+        return Date.now() - last.getTime() > 3 * 86400000;
+      });
+      const chips: string[] = [];
+      for (const g of stagnant.slice(0, 2)) {
+        chips.push(`目标「${g.title}」已停滞，帮我分析下一步`);
+      }
+      chips.push("查看今日收件箱摘要");
+      chips.push("总结我们最近的对话进展");
+      setSuggestions(chips.slice(0, 3));
+    } catch {
+      setSuggestions(["查看今日收件箱摘要", "帮我规划今天的工作"]);
+    }
+  };
 
   useEffect(() => {
     scrollToBottom();
@@ -180,15 +248,21 @@ export default function ChatView({ conversationId }: Props) {
     try {
       const msgs = await getMessages(conversationId);
       setMessages(parseLoadedMessages(msgs));
-    } catch {
-      // Backend may not be running
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "加载消息失败";
+      addError(msg, "对话");
     }
     setStreamingContent("");
   };
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
-    if (!trimmed || isLoading) return;
+    if (!trimmed || isLoading || pendingConfirmation) return;
 
     const userMsg: DisplayMessage = {
       id: `user-${Date.now()}`,
@@ -196,10 +270,28 @@ export default function ChatView({ conversationId }: Props) {
       content: trimmed,
     };
 
+    const conv = conversations.find((c) => c.id === conversationId);
+    const isFirstUserMessage =
+      messages.filter((m) => m.role === "user").length === 0;
+    const needsTitle =
+      isFirstUserMessage &&
+      (!conv?.title || conv.title === "New Chat" || conv.title === "新对话");
+
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
     setStreamingContent("");
+
+    if (needsTitle) {
+      const title = trimmed.slice(0, 30) + (trimmed.length > 30 ? "…" : "");
+      updateConversation(conversationId, title)
+        .then(() => updateConversationTitle(conversationId, title))
+        .catch((err) => {
+          const msg =
+            err instanceof ApiError ? err.message : "更新对话标题失败";
+          addError(msg, "对话");
+        });
+    }
 
     let tempContent = "";
     let tempToolCalls: DisplayMessage["toolCalls"] = [];
@@ -290,7 +382,7 @@ export default function ChatView({ conversationId }: Props) {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMsg.id
-                ? { ...m, content: `Error: ${error}`, isStreaming: false }
+                ? { ...m, content: `错误：${error}`, isStreaming: false }
                 : m
             )
           );
@@ -301,16 +393,30 @@ export default function ChatView({ conversationId }: Props) {
       );
     } catch (err: unknown) {
       setIsLoading(false);
-      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      const errorMsg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "未知错误";
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMsg.id
-            ? { ...m, content: `Error: ${errorMsg}`, isStreaming: false }
+            ? { ...m, content: `错误：${errorMsg}`, isStreaming: false }
             : m
         )
       );
     }
-  }, [input, isLoading, conversationId]);
+  }, [
+    input,
+    isLoading,
+    conversationId,
+    pendingConfirmation,
+    conversations,
+    messages,
+    addError,
+    updateConversationTitle,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -365,8 +471,15 @@ export default function ChatView({ conversationId }: Props) {
         }
         return updated;
       });
-    } catch {
-      // Error handled silently
+    } catch (err) {
+      setPendingConfirmation(pc);
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "审批操作失败";
+      addError(msg, "审批");
     }
   };
 
@@ -413,13 +526,21 @@ export default function ChatView({ conversationId }: Props) {
         }
         return updated;
       });
-    } catch {
-      // Error handled silently
+    } catch (err) {
+      setPendingConfirmation(pc);
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "审批操作失败";
+      addError(msg, "审批");
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-row min-h-0 relative">
+      <div className="flex-1 flex flex-col min-h-0">
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="max-w-3xl mx-auto space-y-4">
@@ -444,11 +565,30 @@ export default function ChatView({ conversationId }: Props) {
       {/* Input area */}
       <div className="border-t border-gray-800 p-4">
         <div className="max-w-3xl mx-auto">
+          {suggestions.length > 0 && !isLoading && !pendingConfirmation && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    setInput(s);
+                    adjustTextareaHeight();
+                    inputRef.current?.focus();
+                  }}
+                  className="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 rounded-full border border-gray-700 transition-colors"
+                >
+                  {s.length > 40 ? s.slice(0, 40) + "…" : s}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex gap-3 items-end bg-gray-900 rounded-xl border border-gray-700 focus-within:border-emerald-600 transition-colors p-3">
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onInput={adjustTextareaHeight}
               onKeyDown={handleKeyDown}
               placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
               rows={1}
@@ -457,7 +597,7 @@ export default function ChatView({ conversationId }: Props) {
             />
             <button
               onClick={handleSend}
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || !input.trim() || !!pendingConfirmation}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-sm font-medium transition-colors shrink-0"
             >
               {isLoading ? (
@@ -486,6 +626,14 @@ export default function ChatView({ conversationId }: Props) {
           </p>
         </div>
       </div>
+      </div>
+
+      <ContextPanel
+        lastUserMessage={lastUserMessage}
+        toolResults={allToolResults}
+        open={contextOpen}
+        onToggle={() => setContextOpen(!contextOpen)}
+      />
     </div>
   );
 }

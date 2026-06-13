@@ -120,8 +120,8 @@ describe("DashboardPage", () => {
   it("renders tool summary section", () => {
     render(<DashboardPage />);
     expect(screen.getAllByText("工具调用详情 (7天)")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("web_search")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("read_file")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("搜索网页")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("读取文件")[0]).toBeInTheDocument();
   });
 
   it("renders memory system section with categories", () => {

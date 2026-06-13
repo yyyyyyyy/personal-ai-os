@@ -1,8 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import TimelinePage from "./Timeline";
+import { listEvents } from "../api/client";
 
 vi.mock("../api/client", () => ({
+  listEvents: vi.fn(),
   listReviews: vi.fn().mockResolvedValue([
     {
       id: "r1",
@@ -19,7 +22,32 @@ vi.mock("../api/client", () => ({
       content: "完成代码审查，处理了3个issue。",
     },
   ]),
+  ApiError: class extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  },
 }));
+
+vi.mock("../stores/errorStore", () => ({
+  useErrorStore: (selector: (s: { addError: () => void }) => unknown) =>
+    selector({ addError: vi.fn() }),
+}));
+
+vi.mock("../stores/chatStore", () => ({
+  useChatStore: (selector: (s: Record<string, unknown>) => unknown) =>
+    selector({ setActiveConversation: vi.fn() }),
+}));
+
+function renderTimeline() {
+  return render(
+    <MemoryRouter>
+      <TimelinePage />
+    </MemoryRouter>
+  );
+}
 
 const now = new Date("2026-06-10T12:00:00Z");
 
@@ -50,38 +78,23 @@ const mockEvents = [
   },
 ];
 
-function mockFetch(events: typeof mockEvents = mockEvents, ok = true) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((url: string) => {
-      if (url.includes("/api/events/")) {
-        return Promise.resolve({
-          ok,
-          json: () => Promise.resolve(events),
-        });
-      }
-      return Promise.reject(new Error("Unknown URL"));
-    }),
-  );
-}
-
 describe("TimelinePage", () => {
   beforeEach(() => {
     vi.setSystemTime(now);
-    mockFetch();
+    vi.mocked(listEvents).mockResolvedValue(mockEvents);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   it("renders timeline title", () => {
-    render(<TimelinePage />);
+    renderTimeline();
     expect(screen.getAllByText("人生时间线")[0]).toBeInTheDocument();
   });
 
   it("renders review section with weekly and daily labels", async () => {
-    render(<TimelinePage />);
+    renderTimeline();
 
     const reviewHeader = await screen.findByText("最近复盘", {}, { timeout: 3000 });
     expect(reviewHeader).toBeInTheDocument();
@@ -97,7 +110,7 @@ describe("TimelinePage", () => {
   });
 
   it("renders event items grouped by date", async () => {
-    render(<TimelinePage />);
+    renderTimeline();
 
     const rustGoal = await screen.findByText(/创建目标「学习Rust」/, {}, { timeout: 3000 });
     expect(rustGoal).toBeInTheDocument();
@@ -110,7 +123,7 @@ describe("TimelinePage", () => {
   });
 
   it("renders event type labels", async () => {
-    render(<TimelinePage />);
+    renderTimeline();
 
     const goalLabels = await screen.findAllByText("创建目标", { exact: true }, { timeout: 3000 });
     expect(goalLabels.length).toBeGreaterThan(0);
@@ -123,7 +136,7 @@ describe("TimelinePage", () => {
   });
 
   it("renders review type labels correctly", async () => {
-    render(<TimelinePage />);
+    renderTimeline();
 
     const weeklyLabel = await screen.findByText(/每周复盘/, {}, { timeout: 3000 });
     expect(weeklyLabel).toBeInTheDocument();
@@ -133,23 +146,24 @@ describe("TimelinePage", () => {
   });
 
   it("shows empty state when no events", async () => {
-    mockFetch([], true);
-    render(<TimelinePage />);
+    vi.mocked(listEvents).mockResolvedValue([]);
+    renderTimeline();
 
     const emptyMsg = await screen.findByText(/暂无事件记录/, {}, { timeout: 3000 });
     expect(emptyMsg).toBeInTheDocument();
   });
 
   it("handles fetch failure gracefully", async () => {
-    mockFetch([], false);
-    render(<TimelinePage />);
+    const { ApiError } = await import("../api/client");
+    vi.mocked(listEvents).mockRejectedValue(new ApiError("加载失败", 500));
+    renderTimeline();
 
     const emptyMsg = await screen.findByText(/暂无事件记录/, {}, { timeout: 3000 });
     expect(emptyMsg).toBeInTheDocument();
   });
 
   it("renders multiple dates in reverse chronological order", async () => {
-    render(<TimelinePage />);
+    renderTimeline();
 
     const dateElements = await screen.findAllByText(/2026年/, { exact: false });
     expect(dateElements.length).toBeGreaterThanOrEqual(2);

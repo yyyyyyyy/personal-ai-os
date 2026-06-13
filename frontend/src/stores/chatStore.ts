@@ -4,18 +4,22 @@ import type { Conversation } from "../api/client";
 interface ChatState {
   conversations: Conversation[];
   activeConversationId: string | null;
+  pendingPrompt: string | null;
   loading: boolean;
 
   setConversations: (convs: Conversation[]) => void;
   setActiveConversation: (id: string | null) => void;
   addConversation: (conv: Conversation) => void;
   removeConversation: (id: string) => void;
+  updateConversationTitle: (id: string, title: string) => void;
+  setPendingPrompt: (prompt: string | null) => void;
   setLoading: (loading: boolean) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
   conversations: [],
   activeConversationId: null,
+  pendingPrompt: null,
   loading: false,
 
   setConversations: (convs) => set({ conversations: convs }),
@@ -28,5 +32,12 @@ export const useChatStore = create<ChatState>((set) => ({
       activeConversationId:
         state.activeConversationId === id ? null : state.activeConversationId,
     })),
+  updateConversationTitle: (id, title) =>
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === id ? { ...c, title } : c
+      ),
+    })),
+  setPendingPrompt: (prompt) => set({ pendingPrompt: prompt }),
   setLoading: (loading) => set({ loading }),
 }));
