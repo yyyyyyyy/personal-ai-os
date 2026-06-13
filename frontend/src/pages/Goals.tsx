@@ -26,6 +26,18 @@ function isStagnant(lastActivity: string | null, days: number = 3): boolean {
   return now.getTime() - last.getTime() > days * 86400000;
 }
 
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "刚刚";
+  if (mins < 60) return `${mins} 分钟前`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} 天前`;
+  return new Date(dateStr).toLocaleDateString("zh-CN");
+}
+
 export default function GoalsPage() {
   const { goalId: urlGoalId } = useParams();
   const navigate = useNavigate();
@@ -224,6 +236,11 @@ export default function GoalsPage() {
                   {goal.title}
                 </span>
               </div>
+              {goal.last_activity_at && (
+                <div className="text-xs text-gray-600 mt-1 ml-4">
+                  上次活动: {timeAgo(goal.last_activity_at)}
+                </div>
+              )}
               {goal.deadline && (
                 <div className="text-xs text-gray-500 mt-1 ml-4">
                   截止: {new Date(goal.deadline).toLocaleDateString("zh-CN")}

@@ -38,9 +38,8 @@ describe("Sidebar", () => {
     expect(screen.getAllByText("对话").length).toBeGreaterThan(0);
     expect(screen.getAllByText("目标")[0]).toBeInTheDocument();
     expect(screen.getAllByText("收件箱")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("时间线")[0]).toBeInTheDocument();
     expect(screen.getAllByText("记忆")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("仪表盘")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("知识库")[0]).toBeInTheDocument();
     expect(screen.getAllByText("设置")[0]).toBeInTheDocument();
   });
 

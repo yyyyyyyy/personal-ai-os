@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { listGoals, ApiError } from "../../api/client";
+import { listGoals, searchMemories, ApiError } from "../../api/client";
 import { type StreamEvent } from "../../api/client";
 import { useErrorStore } from "../../stores/errorStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -73,7 +73,10 @@ export default function ChatView({ conversationId }: Props) {
 
   const loadSuggestions = async () => {
     try {
-      const goals = await listGoals();
+      const [goals, memories] = await Promise.all([
+        listGoals().catch(() => []),
+        searchMemories("", 3).catch(() => []),
+      ]);
       const stagnant = goals.filter((g) => {
         if (g.status !== "active") return false;
         if (!g.last_activity_at) return true;
@@ -82,6 +85,10 @@ export default function ChatView({ conversationId }: Props) {
       const chips: string[] = [];
       for (const g of stagnant.slice(0, 2)) {
         chips.push(`目标「${g.title}」已停滞，帮我分析下一步`);
+      }
+      if (memories.length > 0) {
+        const recent = memories[0].content.slice(0, 40);
+        chips.push(`你之前提到「${recent}${recent.length >= 40 ? "…" : ""}」，继续聊聊？`);
       }
       chips.push("查看今日收件箱摘要");
       chips.push("总结我们最近的对话进展");
