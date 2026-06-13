@@ -147,8 +147,8 @@ python -m pytest tests/runtime/test_taint.py tests/runtime/test_capability_appro
 
 ```bash
 cd backend && ruff check app/ && python -m compileall app/ -q
-cd backend && mypy app/core/runtime/ app/core/agents/memory_engine.py app/core/agents/memory_extractor.py app/product/ app/api/ app/main.py scripts/ --ignore-missing-imports
-cd backend && python -m pytest tests/ -q -m "not live_llm" --cov=app/core/runtime --cov-fail-under=65
+cd backend && mypy app/core/runtime/ app/core/harness/ app/core/agents/memory_engine.py app/core/agents/memory_extractor.py app/product/ app/api/ app/main.py scripts/ --ignore-missing-imports
+cd backend && python -m pytest tests/ -q -m "not live_llm" --cov=app/core/runtime --cov=app/core/harness --cov-report=term && python -m coverage report --include='app/core/runtime/*' --fail-under=65
 cd backend && python scripts/check_boundary.py && python scripts/verify_export_roundtrip.py
 cd frontend && npm test && npx tsc --noEmit
 ```

@@ -94,7 +94,7 @@
 |:---|:---:|:---|
 | P0-1 幽灵数据库 + 路径防护 | ✅ | `resolve_project_path` 相对路径锚定 repo root；`.env.example` 移除易误导的相对路径；启动日志 + `startup_health` |
 | P0-2 `.env*` 保护 | ✅ | 任意目录 `.env` / `.env.*` 拦截，`.env.example` 放行 |
-| P1-1 mypy/coverage 扩面 | ✅ | 纳入 `app/core/harness/` |
+| P1-1 mypy/coverage 扩面 | ✅ | mypy 纳入 `harness/`；coverage 报告含 harness，门禁仍仅 `runtime` ≥65% |
 | P1-2 拆分 kernel.py | ✅ | 抽出 `kernel_query_state.py`（QueryStateMixin） |
 | P2-1 用户验证埋点 | ✅ | `/api/system/validation-metrics` + `validation_metrics.py` |
 | P2-2 收件箱体验闭环 | ⏳ | 待用户验证数据后再深化 |

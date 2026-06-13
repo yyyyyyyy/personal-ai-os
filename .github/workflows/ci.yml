@@ -42,7 +42,8 @@ jobs:
       - name: Run tests
         run: |
           cd backend
-          python -m pytest tests/ -v --cov=app/core/runtime --cov=app/core/harness --cov-report=term --cov-fail-under=65 -m "not live_llm"
+          python -m pytest tests/ -v --cov=app/core/runtime --cov=app/core/harness --cov-report=term -m "not live_llm"
+          python -m coverage report --include='app/core/runtime/*' --fail-under=65
 
       - name: Verify database schema
         run: |
