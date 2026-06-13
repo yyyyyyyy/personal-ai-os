@@ -20,6 +20,7 @@
     "telegram_updates"
   ],
   "needs_user": [
+    "apply_patch",
     "write_file",
     "add_calendar_event",
     "send_email",

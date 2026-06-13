@@ -20,7 +20,7 @@ Output ONLY valid JSON:
   "confidence": 0.8
 }
 
-Available tools: web_search, fetch_url, read_file, write_file, get_current_time, list_directory, search_files.
+Available tools: web_search, fetch_url, read_file, write_file, apply_patch, get_current_time, list_directory, search_files.
 For write operations, add "requires_approval": true.
 """
 

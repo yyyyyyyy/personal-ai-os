@@ -71,7 +71,7 @@ class AgentOrchestrator:
         executed = []
         for step in safe_steps:
             tool = step.get("tool", "")
-            if tool in ("write_file", "shell_exec", "send_email"):
+            if tool in ("apply_patch", "write_file", "shell_exec", "send_email"):
                 continue  # skip write ops in auto pipeline — user confirms separately
             cap = await kernel.invoke_capability(
                 name=tool,

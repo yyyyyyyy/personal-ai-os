@@ -30,3 +30,24 @@ async def test_high_risk_capability_pending_then_approve(kernel):
         approval_id=approval_id,
     )
     assert cap2["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_apply_patch_pending_then_approve(kernel):
+    cap = await kernel.invoke_capability(
+        "apply_patch",
+        {"path": "/tmp/app.py", "old_string": "a", "new_string": "b"},
+        actor="user",
+    )
+    assert cap["status"] == "pending"
+    approval_id = cap["approval_id"]
+
+    cap2 = await kernel.invoke_capability(
+        "apply_patch",
+        {"path": "/tmp/app.py", "old_string": "a", "new_string": "b"},
+        actor="user",
+        correlation_id="patch-retry",
+        pre_approved=True,
+        approval_id=approval_id,
+    )
+    assert cap2["status"] == "success"

@@ -68,4 +68,70 @@ describe("ConfirmationDialog", () => {
     expect(onDeny).toHaveBeenCalledOnce();
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it("shows patch preview for apply_patch", () => {
+    render(
+      <ConfirmationDialog
+        toolCall={{
+          index: 0,
+          id: "tc-2",
+          function_name: "apply_patch",
+          arguments: JSON.stringify({
+            path: "/tmp/app.py",
+            old_string: "return 'hi'",
+            new_string: "return 'hello'",
+          }),
+        }}
+        onConfirm={vi.fn()}
+        onDeny={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("变更预览")).toBeInTheDocument();
+    expect(screen.getByText(/− return 'hi'/)).toBeInTheDocument();
+    expect(screen.getByText(/\+ return 'hello'/)).toBeInTheDocument();
+  });
+
+  it("shows write preview for write_file", () => {
+    render(
+      <ConfirmationDialog
+        toolCall={{
+          index: 0,
+          id: "tc-3",
+          function_name: "write_file",
+          arguments: JSON.stringify({
+            path: "/tmp/app.py",
+            content: "print('hello world')",
+          }),
+        }}
+        onConfirm={vi.fn()}
+        onDeny={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("写入内容预览")).toBeInTheDocument();
+    expect(screen.getAllByText(/print\('hello world'\)/).length).toBeGreaterThan(0);
+  });
+
+  it("shows expandable full content for long patches", () => {
+    const longText = "x".repeat(500);
+    render(
+      <ConfirmationDialog
+        toolCall={{
+          index: 0,
+          id: "tc-4",
+          function_name: "apply_patch",
+          arguments: JSON.stringify({
+            path: "/tmp/app.py",
+            old_string: longText,
+            new_string: "short",
+          }),
+        }}
+        onConfirm={vi.fn()}
+        onDeny={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("查看完整内容")).toBeInTheDocument();
+  });
 });

@@ -117,6 +117,32 @@ class MCPHub:
         ))
 
         self.register_tool(ToolDef(
+            name="apply_patch",
+            description=(
+                "Apply a search-replace patch to a text file. "
+                "Prefer this over write_file for small edits. Requires user confirmation."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Absolute path to the file to patch."},
+                    "old_string": {
+                        "type": "string",
+                        "description": "Exact text to find in the file (must be unique unless replace_all).",
+                    },
+                    "new_string": {"type": "string", "description": "Replacement text."},
+                    "replace_all": {
+                        "type": "boolean",
+                        "description": "Replace all occurrences (default false).",
+                    },
+                },
+                "required": ["path", "old_string", "new_string"],
+            },
+            handler=filesystem_server.apply_patch,
+            requires_confirmation=True,
+        ))
+
+        self.register_tool(ToolDef(
             name="list_directory",
             description="List files and subdirectories at a given path.",
             parameters={

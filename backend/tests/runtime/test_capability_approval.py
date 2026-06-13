@@ -18,6 +18,7 @@ BUILTIN_TOOLS = {
     "get_current_time",
     "read_file",
     "write_file",
+    "apply_patch",
     "list_directory",
     "search_files",
     "web_search",
@@ -57,7 +58,7 @@ def test_capability_policy_covers_all_registered_tools():
     assert not missing, f"Builtin tools missing from capability_policy: {missing}"
     assert not extra, f"Unknown tools in capability_policy: {extra}"
     assert not overlap, f"Tools in both auto_allow and needs_user: {overlap}"
-    assert len(BUILTIN_TOOLS) == 23
+    assert len(BUILTIN_TOOLS) == 24
 
 
 def make_kernel(tmp_path):

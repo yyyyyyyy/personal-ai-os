@@ -7,7 +7,7 @@
 - 💬 **会记事的对话** —— 带长期记忆与目标上下文，不是每次从零开始
 - 📥 **智能收件箱** —— 自动轮询、分类、摘要邮件，对话里也能直接查信
 - 🎯 **目标与行动管理** —— 停滞检测、主动提醒
-- 🛠️ **23 个工具 + 审批治理** —— 写文件、跑命令、发邮件等高风险操作必须经你确认
+- 🛠️ **24 个工具 + 审批治理** —— 精准改文件、写文件、跑命令、发邮件等高风险操作必须经你确认
 - 🔒 **数据主权护城河** —— 完整 `event_log` 无损导出/导入，跨模型可重建你的全部个人数据
 
 **为什么不同：** 大多数 AI 助手把你的数据存在它们的云上。这个项目反过来——Kernel 边界保证 Agent 永远不能直接读写你的存储，所有改动都留痕在不可变的事件日志里，你随时可以带着数据走。
@@ -154,7 +154,7 @@ CI 还额外运行 ruff、mypy、schema 校验、MCP 工具注册校验等，见
 
 | 页面 | 能力 |
 |------|------|
-| Chat | 带记忆/目标上下文的对话，23 个 MCP 工具，高风险操作审批 |
+| Chat | 带记忆/目标上下文的对话，24 个 MCP 工具，高风险操作审批 |
 | Inbox | 邮件轮询、分类、摘要；对话中也可 `check_inbox` 查信 |
 | Goals | 目标与行动管理，停滞检测 |
 | Dashboard | 系统状态与主动建议 |
@@ -212,7 +212,7 @@ curl -X POST http://localhost:8000/api/system/import \
 ```
 User → Runtime Kernel (Event Log / State / Permissions)
          ├─ Agents (Brain, Planner, Critic — ephemeral)
-         ├─ Capabilities (23 MCP Tools)
+         ├─ Capabilities (24 MCP Tools)
          ├─ Apps (Inbox, Brief, Review, …)
          └─ Storage (SQLite + ChromaDB, 本地)
 ```

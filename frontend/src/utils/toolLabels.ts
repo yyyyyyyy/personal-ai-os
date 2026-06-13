@@ -18,6 +18,11 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     describeArgs: (a) => `📂 ${a.path || "?"}`,
   },
   write_file: { label: "写入文件", icon: "✍️" },
+  apply_patch: {
+    label: "修改文件",
+    icon: "✏️",
+    describeArgs: (a) => `📂 ${a.path || "?"}`,
+  },
   list_directory: { label: "列出目录内容", icon: "📁" },
   search_files: { label: "搜索文件", icon: "🔍" },
   web_search: {

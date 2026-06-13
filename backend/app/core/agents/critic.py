@@ -26,7 +26,7 @@ class CriticAgent:
                 return False
 
         # Rule 2: Write operations need explicit user approval
-        dangerous_tools = {"write_file", "shell_exec", "git_push", "send_email"}
+        dangerous_tools = {"apply_patch", "write_file", "shell_exec", "git_push", "send_email"}
         if tool_name in dangerous_tools:
             is_approved = params.get("_approved", False)
             if not is_approved:

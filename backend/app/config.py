@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     memory_extractor: str = "ollama"
     sensitive_ops_local: bool = False
 
+    # --- Filesystem (agent coding) ---
+    filesystem_allowed_dirs: str = ""
+    """Comma-separated allowed roots for read/write tools. Default: project root + home. Requires backend restart."""
+    filesystem_protected_paths: str = ""
+    """Extra comma-separated paths appended to default governance write blocklist. Requires backend restart."""
+
     # --- Conversation ---
     max_recent_messages: int = 50
     max_tool_iterations: int = 10

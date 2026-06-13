@@ -17,7 +17,7 @@ class SensitiveRouter:
   def is_sensitive_capability(self, name: str, args: dict | None = None) -> bool:
       if not settings.sensitive_ops_local:
           return False
-      write_tools = {"write_file", "shell_exec", "send_email"}
+      write_tools = {"apply_patch", "write_file", "shell_exec", "send_email"}
       if name in write_tools:
           return True
       if args:

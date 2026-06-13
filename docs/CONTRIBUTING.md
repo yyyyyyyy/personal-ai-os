@@ -100,8 +100,38 @@ cd frontend && npx tsc --noEmit
 |------|------|
 | 出站 URL 校验 | `backend/app/core/harness/url_safety.py` |
 | Shell 执行 | `backend/app/core/harness/mcp_servers/shell.py` |
+| Agent 文件读写 / patch | `backend/app/core/harness/mcp_servers/filesystem.py` |
 | 策略真源 | `mcp_hub` 注册名、`capability_policy.json`、`taint.py` |
+| 写类工具审批 UI | `frontend/src/components/chat/ConfirmationDialog.tsx` |
 | 架构/威胁 | `docs/THREAT_MODEL.md`、`docs/RUNTIME_SPEC.md` |
+
+### 新增写类 Capability 检查（本仓库）
+
+同步修改并跑契约测试：
+
+```bash
+# 1. 注册 + policy + taint 一致
+rg "apply_patch|write_file" backend/app/core/harness/mcp_hub.py \
+  backend/capability_policy.json backend/app/core/runtime/taint.py
+
+# 2. 契约测试
+cd backend && python -m pytest tests/runtime/test_taint.py \
+  tests/runtime/test_capability_approval.py -q
+
+# 3. 文档与 CI 工具数（当前 builtin = 24）
+rg "23 个|23 builtin|>= 23" README.md docs/ .github/
+```
+
+还需更新：`sensitive_router.py`、`critic.py`、`agent_orchestrator.py`、`frontend/src/utils/toolLabels.ts`、`.github/workflows/ci.yml` 中的 expected 工具集合。
+
+### Agent Coding 环境变量（本仓库）
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `FILESYSTEM_ALLOWED_DIRS` | 项目根 + `~` | 逗号分隔；改后**重启后端** |
+| `FILESYSTEM_PROTECTED_PATHS` | （追加）kernel、策略、taint、敏感 `.env*`、`.git` 等 | 只追加，不替换默认名单 |
+
+默认禁止 Agent 写入治理层；`.env.example` 与 `backend/mcp_config.json` 可写。详见 `brain.py` system prompt 与 `filesystem.py`。
 
 ### 安全回归（本仓库）
 

@@ -39,6 +39,7 @@ _EXTERNAL_WRITE_DYNAMIC: set[str] = set()
 
 # Registered MCP tools in capability_policy.json "needs_user" — mutate host or exfiltrate.
 WRITE_CLASS_TOOLS = frozenset({
+    "apply_patch",
     "write_file",
     "add_calendar_event",
     "send_email",

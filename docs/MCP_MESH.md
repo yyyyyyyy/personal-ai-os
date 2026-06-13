@@ -6,7 +6,7 @@
 
 ## 1. Design Goal
 
-MCP Mesh connects the Runtime Kernel to real external MCP servers, converting the **23 builtin capabilities** into an extensible **N capabilities** mesh while **preserving the Kernel governance contract unchanged.**
+MCP Mesh connects the Runtime Kernel to real external MCP servers, converting the **24 builtin capabilities** into an extensible **N capabilities** mesh while **preserving the Kernel governance contract unchanged.**
 
 Principle: external tools are indistinguishable from builtin tools after registration—same `invoke_capability`, same approval gating, same taint tracking, same event log audit trail.
 
@@ -113,7 +113,7 @@ ingestion_tool/pattern       → register_external_ingestion_tool(name)
 requires_confirmation=true   → register_external_write_tool(name)
 ```
 
-External write tools participate in taint escalation alongside the builtin `WRITE_CLASS_TOOLS` (`write_file`, `shell_exec`, `send_email`, …).
+External write tools participate in taint escalation alongside the builtin `WRITE_CLASS_TOOLS` (`apply_patch`, `write_file`, `shell_exec`, `send_email`, …).
 
 ### 4.3 URL Safety
 
@@ -197,7 +197,7 @@ Special characters in tool names (hyphens, …) are replaced with `_`. Collision
 | github | lazy | 8 (search/repos/code/issues, PR read) | low — ingestion | — |
 | notion | lazy | 4 (search, read page, blocks, query) | low — ingestion | — |
 
-**Total builtin tools:** 23 | **Max external tools:** 24 | **Max total:** 47
+**Total builtin tools:** 24 | **Max external tools:** 24 | **Max total:** 48
 
 All write-class tools participate in taint escalation (external content → approve before write).
 
