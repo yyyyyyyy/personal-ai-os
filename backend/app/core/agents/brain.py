@@ -118,23 +118,15 @@ class Brain:
                 if delta is None:
                     continue
 
-                # Text content — accumulate, defer stripping until streaming complete
+                # Text content — always strip markup from full accumulated text.
+                # Strip on every delta; emit only new visible portion.
                 if delta.content:
                     assistant_content_raw += delta.content
-                    content_len = len(assistant_content_raw)
-                    if content_len <= 300:
-                        cleaned = strip_tool_markup(assistant_content_raw)
-                    else:
-                        # Over 300 chars: try simple regex on the full buffer
-                        from app.core.agents.tool_markup import _TOOL_CALLS_BLOCK_RE
-
-                        cleaned = _TOOL_CALLS_BLOCK_RE.sub("", assistant_content_raw)
-                        if cleaned == assistant_content_raw:
-                            continue
-                    visible = cleaned[len(assistant_visible):]
-                    if visible:
+                    cleaned = strip_tool_markup(assistant_content_raw)
+                    extra = cleaned[len(assistant_visible) :]
+                    if extra:
                         assistant_visible = cleaned
-                        yield {"type": "text_delta", "content": visible}
+                        yield {"type": "text_delta", "content": extra}
 
                 # Tool calls
                 if delta.tool_calls:
@@ -355,6 +347,7 @@ class Brain:
 
         content = response.choices[0].message.content or ""
         if content:
+            content = strip_tool_markup(content)
             conversation.save_assistant_message(content)
         return content
 
@@ -417,7 +410,7 @@ class Brain:
                 temperature=settings.llm_temperature,
                 max_tokens=settings.llm_max_tokens,
             )
-            return (response.choices[0].message.content or "").strip()
+            return strip_tool_markup((response.choices[0].message.content or "").strip())
         except Exception:
             logger.exception("_synthesize_from_tool_results failed")
             return ""
@@ -439,7 +432,7 @@ class Brain:
                 temperature=settings.llm_temperature,
                 max_tokens=settings.llm_max_tokens,
             )
-            return (response.choices[0].message.content or "").strip()
+            return strip_tool_markup((response.choices[0].message.content or "").strip())
         except Exception:
             logger.exception("_complete_text_only retry failed")
             return "抱歉，我暂时无法生成回复，请再试一次。"

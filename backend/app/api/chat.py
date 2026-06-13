@@ -203,7 +203,8 @@ async def resolve_approval(approval_id: str, body: ResolveApprovalRequest):
         )
         payload: dict = {"status": "success", "result": result_str}
         if assistant_message is not None:
-            payload["assistant_message"] = assistant_message
+            from app.core.agents.tool_markup import strip_tool_markup
+            payload["assistant_message"] = strip_tool_markup(assistant_message)
         return payload
     else:
         kernel.deny_approval(
@@ -218,5 +219,6 @@ async def resolve_approval(approval_id: str, body: ResolveApprovalRequest):
         )
         payload = {"status": "denied"}
         if assistant_message is not None:
-            payload["assistant_message"] = assistant_message
+            from app.core.agents.tool_markup import strip_tool_markup
+            payload["assistant_message"] = strip_tool_markup(assistant_message)
         return payload
