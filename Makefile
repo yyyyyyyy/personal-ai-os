@@ -34,7 +34,7 @@ lint:
 	cd $(BACKEND_DIR) && ruff check app/
 
 typecheck:
-	cd $(BACKEND_DIR) && mypy app/core/runtime/ app/core/agents/memory_engine.py app/core/agents/memory_extractor.py app/product/ app/api/ app/main.py scripts/ --ignore-missing-imports
+	cd $(BACKEND_DIR) && mypy app/core/runtime/ app/core/harness/ app/core/agents/memory_engine.py app/core/agents/memory_extractor.py app/product/ app/api/ app/main.py scripts/ --ignore-missing-imports
 
 ci-local: lint typecheck test-backend test-frontend boundary export-roundtrip-verify
 	@echo "ci-local checks passed"

@@ -1,10 +1,49 @@
 """Application configuration management using pydantic-settings."""
 
+import logging
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
+logger = logging.getLogger(__name__)
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+def resolve_project_path(value: str) -> str:
+    """Resolve a path relative to repo root (BASE_DIR), not process cwd.
+
+    Prevents ghost paths like backend/backend/data when uvicorn runs from backend/.
+    """
+    p = Path(value).expanduser()
+    if not p.is_absolute():
+        p = (BASE_DIR / p).resolve()
+    else:
+        p = p.resolve()
+    return str(p)
+
+
+def validate_storage_paths(
+    data_dir: str,
+    sqlite_path: str,
+    vector_dir: str,
+) -> list[str]:
+    """Return warnings for mis-resolved storage paths (e.g. backend/backend/data)."""
+    warnings: list[str] = []
+    for label, raw in (
+        ("data_dir", data_dir),
+        ("sqlite_path", sqlite_path),
+        ("vector_dir", vector_dir),
+    ):
+        parts = Path(raw).parts
+        for i in range(len(parts) - 1):
+            if parts[i] == "backend" and parts[i + 1] == "backend":
+                warnings.append(
+                    f"{label}={raw!r} looks like a ghost path (backend/backend). "
+                    "Leave DATA_DIR/SQLITE_PATH/VECTOR_DIR blank in .env to use repo-root defaults."
+                )
+                break
+    return warnings
 
 
 class Settings(BaseSettings):
@@ -93,10 +132,19 @@ class Settings(BaseSettings):
 
     def model_post_init(self, _context) -> None:
         """Resolve relative defaults that depend on other fields."""
-        if not self.sqlite_path:
+        if not self.data_dir.strip():
+            self.data_dir = str(BASE_DIR / "backend" / "data")
+        self.data_dir = resolve_project_path(self.data_dir)
+        if self.sqlite_path:
+            self.sqlite_path = resolve_project_path(self.sqlite_path)
+        else:
             self.sqlite_path = str(Path(self.data_dir) / "personal_ai.db")
-        if not self.vector_dir:
+        if self.vector_dir:
+            self.vector_dir = resolve_project_path(self.vector_dir)
+        else:
             self.vector_dir = str(Path(self.data_dir) / "vectors")
+        self.mcp_config_path = resolve_project_path(self.mcp_config_path)
+        self.capability_policy_path = resolve_project_path(self.capability_policy_path)
 
 
 settings = Settings()
@@ -116,3 +164,14 @@ def reset_settings() -> None:
 # Ensure data directories exist
 Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
 Path(settings.vector_dir).mkdir(parents=True, exist_ok=True)
+
+for _warn in validate_storage_paths(
+    settings.data_dir, settings.sqlite_path, settings.vector_dir
+):
+    logger.warning("Storage path: %s", _warn)
+logger.info(
+    "Storage paths — data_dir=%s sqlite=%s vectors=%s",
+    settings.data_dir,
+    settings.sqlite_path,
+    settings.vector_dir,
+)

@@ -8,6 +8,7 @@ This module implements the core P0 ABI from docs/RUNTIME_SPEC.md §3.1:
     emit_event / read_events / subscribe_events / query_state
 
 Governance (approval workflows) → kernel_governance.py (GovernanceMixin)
+Query state (read projections) → kernel_query_state.py (QueryStateMixin)
 Sovereignty (export/import/rebuild) → kernel_sovereignty.py (SovereigntyMixin)
 """
 
@@ -24,6 +25,7 @@ from .constants import (
 )
 from .event import Event
 from .kernel_governance import GovernanceMixin
+from .kernel_query_state import QueryStateMixin
 from .kernel_sovereignty import SovereigntyMixin
 
 logger = logging.getLogger(__name__)
@@ -76,7 +78,7 @@ MEMORIES_LEGACY_DDL = [
 ]
 
 
-class Kernel(GovernanceMixin, SovereigntyMixin):
+class Kernel(QueryStateMixin, GovernanceMixin, SovereigntyMixin):
     def __init__(self, db=None):
         # Default to the global Database singleton; tests inject their own.
         if db is None:
@@ -300,283 +302,8 @@ class Kernel(GovernanceMixin, SovereigntyMixin):
                 )
 
     # --- Read layer (projections) -------------------------------------------
-
-    def query_state(self, selector: str, **filters: Any) -> list[dict]:
-        """Read current State (a projection). Returns list of dict rows.
-
-        Each dict follows the schema of the corresponding projection table.
-        See kernel/types.py for the intended TypedDict shapes.
-        """
-        if selector == "goals":
-            return self._query_goals(filters)
-        if selector == "tasks":
-            return self._query_tasks(filters)
-        if selector == "approvals":
-            return self._query_approvals(filters)
-        if selector == "actions":
-            return self._query_actions(filters)
-        if selector == "memories":
-            return self._query_memories(filters)
-        if selector == "patterns":
-            return self._query_patterns(filters)
-        raise ValueError(f"Unknown state selector: {selector!r}")
-
-    def _query_goals(self, filters: dict[str, Any]) -> list[dict]:
-        goal_id = filters.get("id")
-        status = filters.get("status")
-        limit = filters.get("limit", 50)
-        order = filters.get("order", "importance_desc")
-        last_activity_older_than_days = filters.get("last_activity_older_than_days")
-        deadline_within_days = filters.get("deadline_within_days")
-        updated_since = filters.get("updated_since")
-        has_deadline = filters.get("has_deadline")
-
-        order_clauses = {
-            "importance_desc": "importance DESC, created_at DESC",
-            "importance_urgency_desc": "importance DESC, urgency DESC",
-            "last_activity_asc": "last_activity_at ASC",
-            "importance_desc_only": "importance DESC",
-        }
-        order_sql = order_clauses.get(order, order_clauses["importance_desc"])
-
-        with self._db.get_db() as conn:
-            if goal_id:
-                row = conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
-                return [dict(row)] if row else []
-
-            clauses: list[str] = []
-            params: list[Any] = []
-            if status is not None:
-                clauses.append("status = ?")
-                params.append(status)
-            if last_activity_older_than_days is not None:
-                clauses.append("last_activity_at < datetime('now', ?)")
-                params.append(f"-{int(last_activity_older_than_days)} days")
-            if deadline_within_days is not None:
-                clauses.append(
-                    "deadline IS NOT NULL AND deadline BETWEEN datetime('now') AND datetime('now', ?)"
-                )
-                params.append(f"+{int(deadline_within_days)} days")
-            if updated_since is not None:
-                clauses.append("updated_at >= ?")
-                params.append(updated_since)
-            if has_deadline:
-                clauses.append("deadline IS NOT NULL")
-
-            where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-            params.append(limit)
-            rows = conn.execute(
-                f"SELECT * FROM goals{where} ORDER BY {order_sql} LIMIT ?",
-                params,
-            ).fetchall()
-        return [dict(r) for r in rows]
-
-    def _query_actions(self, filters: dict[str, Any]) -> list[dict]:
-        goal_id = filters.get("goal_id")
-        action_id = filters.get("id")
-        status = filters.get("status")
-        limit = filters.get("limit", 100)
-        order = filters.get("order", "created_at_asc")
-
-        order_clauses = {
-            "created_at_asc": "created_at ASC",
-            "created_at_desc": "created_at DESC",
-        }
-        order_sql = order_clauses.get(order, order_clauses["created_at_asc"])
-
-        with self._db.get_db() as conn:
-            if action_id:
-                row = conn.execute("SELECT * FROM actions WHERE id = ?", (action_id,)).fetchone()
-                return [dict(row)] if row else []
-
-            clauses: list[str] = []
-            params: list[Any] = []
-            if goal_id is not None:
-                clauses.append("goal_id = ?")
-                params.append(goal_id)
-            if status is not None:
-                clauses.append("status = ?")
-                params.append(status)
-
-            where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-            params.append(limit)
-            rows = conn.execute(
-                f"SELECT * FROM actions{where} ORDER BY {order_sql} LIMIT ?",
-                params,
-            ).fetchall()
-        return [dict(r) for r in rows]
-
-    def _query_tasks(self, filters: dict[str, Any]) -> list[dict]:
-        task_id = filters.get("id")
-        status = filters.get("status")
-        parent_goal_id = filters.get("parent_goal_id")
-        parent_task_id = filters.get("parent_task_id")
-        root_only = filters.get("root_only")
-        depends_on_task = filters.get("depends_on_task")
-        limit = filters.get("limit")
-        order = filters.get("order", "created_at_asc")
-
-        order_clauses = {
-            "created_at_asc": "created_at ASC",
-            "created_at_desc": "created_at DESC",
-            "priority_desc": "priority DESC, created_at ASC",
-            "priority_desc_created_desc": "priority DESC, created_at DESC",
-        }
-        order_sql = order_clauses.get(order, order_clauses["created_at_asc"])
-
-        with self._db.get_db() as conn:
-            if task_id:
-                row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-                return [dict(row)] if row else []
-
-            clauses: list[str] = []
-            params: list[Any] = []
-            if status is not None:
-                clauses.append("status = ?")
-                params.append(status)
-            if parent_goal_id is not None:
-                clauses.append("parent_goal_id = ?")
-                params.append(parent_goal_id)
-            if parent_task_id is not None:
-                clauses.append("parent_task_id = ?")
-                params.append(parent_task_id)
-            if root_only:
-                clauses.append("parent_task_id IS NULL")
-            if depends_on_task is not None:
-                clauses.append("dependencies_json LIKE ?")
-                params.append(f"%{depends_on_task}%")
-
-            where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-            limit_sql = f" LIMIT {int(limit)}" if limit is not None else ""
-            rows = conn.execute(
-                f"SELECT * FROM tasks{where} ORDER BY {order_sql}{limit_sql}",
-                params,
-            ).fetchall()
-        return [dict(r) for r in rows]
-
-    def _query_approvals(self, filters: dict[str, Any]) -> list[dict]:
-        approval_id = filters.get("id")
-        status = filters.get("status")
-        limit = filters.get("limit", 50)
-
-        with self._db.get_db() as conn:
-            if approval_id:
-                row = conn.execute(
-                    "SELECT * FROM approvals WHERE id = ?", (approval_id,)
-                ).fetchone()
-                return [dict(row)] if row else []
-            if status is not None:
-                rows = conn.execute(
-                    "SELECT * FROM approvals WHERE status = ? ORDER BY created_at DESC LIMIT ?",
-                    (status, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM approvals ORDER BY created_at DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
-        return [dict(r) for r in rows]
-
-    def _query_memories(self, filters: dict[str, Any]) -> list[dict]:
-        memory_id = filters.get("id")
-        category = filters.get("category")
-        origin = filters.get("origin")
-        claim_status = filters.get("claim_status")
-        confidence_gt = filters.get("confidence_gt")
-        confidence_lt = filters.get("confidence_lt")
-        decay_eligible = filters.get("decay_eligible")
-        limit = filters.get("limit", 50)
-
-        with self._db.get_db() as conn:
-            if memory_id:
-                row = conn.execute(
-                    "SELECT * FROM memories WHERE id = ?", (memory_id,)
-                ).fetchone()
-                return [dict(row)] if row else []
-
-            clauses: list[str] = []
-            params: list[Any] = []
-            if category is not None:
-                clauses.append("category = ?")
-                params.append(category)
-            if origin is not None:
-                clauses.append("origin = ?")
-                params.append(origin)
-            if claim_status is not None:
-                clauses.append("claim_status = ?")
-                params.append(claim_status)
-            if confidence_gt is not None:
-                clauses.append("confidence > ?")
-                params.append(confidence_gt)
-            if confidence_lt is not None:
-                clauses.append("confidence < ?")
-                params.append(confidence_lt)
-            if decay_eligible:
-                clauses.append(
-                    "(decayed_at IS NULL OR decayed_at < datetime('now', '-7 days'))"
-                )
-
-            where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-            params.append(limit)
-            rows = conn.execute(
-                f"SELECT * FROM memories{where} ORDER BY confidence DESC, created_at DESC LIMIT ?",
-                params,
-            ).fetchall()
-        return [dict(r) for r in rows]
-
-    def _query_patterns(self, filters: dict[str, Any]) -> list[dict]:
-        """Read statistical patterns (time_distribution, topic_distribution, trend).
-
-        Filters supported: pattern_type, metric, window_days, limit.
-        """
-        pattern_id = filters.get("id")
-        pattern_type = filters.get("pattern_type")
-        metric = filters.get("metric")
-        window_days = filters.get("window_days")
-        limit = filters.get("limit", 50)
-
-        with self._db.get_db() as conn:
-            if pattern_id:
-                row = conn.execute(
-                    "SELECT * FROM patterns WHERE id = ?", (pattern_id,)
-                ).fetchone()
-                return [dict(row)] if row else []
-
-            clauses: list[str] = []
-            params: list[Any] = []
-            if pattern_type is not None:
-                clauses.append("pattern_type = ?")
-                params.append(pattern_type)
-            if metric is not None:
-                clauses.append("metric = ?")
-                params.append(metric)
-            if window_days is not None:
-                clauses.append("window_days = ?")
-                params.append(int(window_days))
-
-            where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-            params.append(limit)
-            rows = conn.execute(
-                f"SELECT * FROM patterns{where} ORDER BY created_at DESC LIMIT ?",
-                params,
-            ).fetchall()
-        return [dict(r) for r in rows]
-
-    def list_capability_definitions(self) -> list[dict]:
-        """Read-only capability metadata for LLM tool schemas (User Space ABI)."""
-        from app.core.harness.mcp_hub import mcp_hub
-
-        return mcp_hub.get_tool_defs_for_llm()
-
-    def recall_memory(self, query: str, k: int = 5) -> list[dict]:
-        """Semantic recall from derived memories (projected from MemoryDerived events).
-
-        Uses ChromaDB under the hood, but User Space never touches the vector
-        store directly — it all flows through this ABI.
-        """
-        from app.store.vector import vector_store
-
-        return vector_store.search_memories(query, n_results=k)
+    # See kernel_query_state.py (QueryStateMixin) for:
+    #   query_state() / list_capability_definitions() / recall_memory()
 
     # --- Governance layer ----------------------------------------------------
 

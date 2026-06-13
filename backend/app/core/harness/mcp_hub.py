@@ -6,8 +6,9 @@ enhanced filesystem tools backed by dedicated server modules.
 
 import json
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Callable
+from typing import cast
 
 from app.core.harness.mcp_servers.browser import browser_server
 from app.core.harness.mcp_servers.calendar import calendar_server
@@ -29,7 +30,7 @@ class ToolDef:
     name: str
     description: str
     parameters: dict
-    handler: Callable[..., str]
+    handler: Callable[..., str | Awaitable[str]]
     is_async: bool = False
     requires_confirmation: bool = False
 
@@ -527,9 +528,9 @@ class MCPHub:
         start_time = time.time()
         try:
             if tool.is_async:
-                result = await tool.handler(**arguments)
+                result = await cast(Awaitable[str], tool.handler(**arguments))
             else:
-                result = tool.handler(**arguments)
+                result = cast(str, tool.handler(**arguments))
 
             latency = (time.time() - start_time) * 1000
             telemetry.record_tool_call(ToolCallRecord(

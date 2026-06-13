@@ -33,6 +33,7 @@ from app.core.runtime.event_bus import event_bus
 from app.core.runtime.kernel_event_bridge import register_kernel_event_bridge
 from app.core.runtime.pattern.aggregators import pattern_aggregator
 from app.core.runtime.scheduler_v2 import init_scheduler_v2, shutdown_scheduler_v2
+from app.core.startup_health import enrich_with_mcp_status, run_startup_checks
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
+    app.state.startup_health = run_startup_checks()
+
     if not settings.auth_token:
         if settings.host in _EXPOSED_HOSTS:
             if not settings.allow_no_auth_on_exposed:
@@ -142,6 +145,8 @@ async def lifespan(app: FastAPI):
             logger.info("MCP mesh: %d tools ready at startup (lazy servers connect in background)", startup_tools)
     except Exception:
         logger.exception("MCP mesh startup failed — continuing with builtin tools only")
+
+    app.state.startup_health = enrich_with_mcp_status(app.state.startup_health)
 
     yield
 

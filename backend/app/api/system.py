@@ -1,12 +1,26 @@
 """System API — health checks, LLM providers, data sovereignty, and system info."""
 
-from fastapi import APIRouter, HTTPException
+import secrets
+
+from fastapi import APIRouter, HTTPException, Request
 
 from app.api.models import ExportRequest, ImportRequest
+from app.config import settings
 from app.core.agents.llm_router import llm_router
+from app.core.startup_health import sanitize_startup_for_public
 from app.product.digital_legacy import digital_legacy
 
 router = APIRouter(prefix="/api/system", tags=["system"])
+
+
+def _request_has_valid_auth(request: Request) -> bool:
+    expected = settings.auth_token
+    if not expected:
+        return False
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return False
+    return secrets.compare_digest(auth_header[7:], expected)
 
 EXPORT_CONFIRM = "EXPORT_ALL_DATA"
 DESTROY_CONFIRM = "DESTROY_ALL_DATA"
@@ -14,16 +28,26 @@ IMPORT_CONFIRM = "DESTROY_AND_IMPORT"
 
 
 @router.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    from app.config import settings
-
+async def health_check(request: Request):
+    """Health check endpoint with startup diagnostics."""
+    startup = getattr(request.app.state, "startup_health", None)
+    if startup and not _request_has_valid_auth(request):
+        startup = sanitize_startup_for_public(startup)
     return {
-        "status": "ok",
+        "status": startup.get("status", "ok") if startup else "ok",
         "service": "personal-ai-runtime",
         "version": "0.9.0",
         "auth_required": bool(settings.auth_token),
+        "startup": startup,
     }
+
+
+@router.get("/validation-metrics")
+async def validation_metrics():
+    """User validation cohort metrics (see docs/USER_VALIDATION.md)."""
+    from app.product.validation_metrics import get_validation_metrics
+
+    return get_validation_metrics()
 
 
 @router.get("/llm-providers")

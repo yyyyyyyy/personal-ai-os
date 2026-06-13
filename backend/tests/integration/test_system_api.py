@@ -89,3 +89,39 @@ def test_destroy_success_with_confirm(client: TestClient, monkeypatch):
     )
     assert r.status_code == 200
     assert r.json()["status"] == "destroyed"
+
+
+def test_health_includes_startup_diagnostics(client: TestClient):
+    r = client.get("/api/system/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["service"] == "personal-ai-runtime"
+    startup = data["startup"]
+    assert startup is not None
+    assert startup["status"] in ("ok", "degraded")
+    storage = startup["checks"]["storage"]
+    assert storage["data_dir_exists"] is True
+    assert "data_dir" not in storage
+    assert "warnings" not in startup
+    assert "warning_count" in startup
+
+
+def test_health_full_startup_with_auth(authed_client: TestClient):
+    r = authed_client.get(
+        "/api/system/health",
+        headers={"Authorization": "Bearer test-secret"},
+    )
+    assert r.status_code == 200
+    startup = r.json()["startup"]
+    assert startup is not None
+    assert "warnings" in startup
+    assert "data_dir" in startup["checks"]["storage"]
+
+
+def test_validation_metrics_endpoint(client: TestClient):
+    r = client.get("/api/system/validation-metrics")
+    assert r.status_code == 200
+    data = r.json()
+    assert "active_chat_days_7d" in data
+    assert "export_count" in data
+    assert "targets" in data

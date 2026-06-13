@@ -4,6 +4,7 @@ Defines the message format for agent-to-agent interactions (schedule meetings, s
 """
 
 import json
+from typing import Any
 
 
 class PersonalAgentProtocol:
@@ -21,10 +22,10 @@ class PersonalAgentProtocol:
         }
 
     @staticmethod
-    def parse_message(raw: str | dict) -> dict:
+    def parse_message(raw: str | dict) -> dict[str, Any]:
         """Parse an incoming agent message."""
         if isinstance(raw, str):
-            raw = json.loads(raw)
+            return json.loads(raw)
         return raw
 
     @staticmethod

@@ -167,6 +167,20 @@ def test_write_env_variants_protected(fs_server: FilesystemServer, tmp_path: Pat
         assert "protected" in result["error"].lower()
 
 
+def test_write_env_subdirectory_protected(fs_server: FilesystemServer, tmp_path: Path):
+    allowed = tmp_path / "allowed"
+    subdir = allowed / "backend"
+    subdir.mkdir()
+    env_local = subdir / ".env.local"
+    env_local.write_text("KEY=2", encoding="utf-8")
+
+    server = FilesystemServer(allowed_dirs=[str(allowed)])
+    result = json.loads(server.write_file(str(env_local), "hacked"))
+    assert "error" in result
+    assert "protected" in result["error"].lower()
+    assert env_local.read_text(encoding="utf-8") == "KEY=2"
+
+
 def test_write_env_example_allowed(fs_server: FilesystemServer, tmp_path: Path):
     allowed = tmp_path / "allowed"
     env = allowed / ".env"

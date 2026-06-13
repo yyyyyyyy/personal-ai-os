@@ -67,29 +67,27 @@ class FilesystemServer:
         except Exception:
             return False
 
-    def _is_env_secret_file(self, p: Path, prot: Path) -> bool:
-        """Block .env secrets but allow .env.example template updates."""
-        if prot.name != ".env" or p.parent != prot.parent:
-            return False
+    def _is_env_secret_file(self, p: Path) -> bool:
+        """Block .env secrets in any directory; allow .env.example templates."""
         if p.name == ".env.example":
             return False
         if p.name == ".env":
             return True
         if p.name.startswith(".env."):
             return True
-        return p.name.startswith(".env")
+        return False
 
     def _is_protected(self, path: str) -> bool:
         """Check if a path is governance-protected (agent must not write here)."""
         try:
             p = Path(path).expanduser().resolve()
+            if self._is_env_secret_file(p):
+                return True
             for protected in self.protected_paths:
                 prot = Path(protected).expanduser().resolve()
                 if p == prot:
                     return True
                 if prot.is_dir() and p.is_relative_to(prot):
-                    return True
-                if self._is_env_secret_file(p, prot):
                     return True
             return False
         except Exception:
@@ -251,7 +249,7 @@ class FilesystemServer:
         if not p.is_dir():
             return json.dumps({"error": f"Not a directory: {path}"})
 
-        results = []
+        results: list[dict[str, str]] = []
         try:
             for item in p.rglob(f"*{query}*"):
                 if len(results) >= 50:

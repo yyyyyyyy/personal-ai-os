@@ -91,7 +91,7 @@ class CalendarServer:
                     except (ValueError, IndexError):
                         continue
 
-        events.sort(key=lambda e: e["days_away"])
+        events.sort(key=lambda e: int(str(e.get("days_away", 0))))
         return json.dumps({"upcoming_days": days, "count": len(events), "events": events[:20]})
 
 

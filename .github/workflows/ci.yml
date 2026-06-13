@@ -37,12 +37,12 @@ jobs:
         run: |
           cd backend
           # Kernel + Runtime + API layer + Product layer; full app/ has legacy type debt outside this scope
-          mypy app/core/runtime/ app/core/agents/memory_engine.py app/core/agents/memory_extractor.py app/product/ app/api/ app/main.py scripts/ --ignore-missing-imports
+          mypy app/core/runtime/ app/core/harness/ app/core/agents/memory_engine.py app/core/agents/memory_extractor.py app/product/ app/api/ app/main.py scripts/ --ignore-missing-imports
 
       - name: Run tests
         run: |
           cd backend
-          python -m pytest tests/ -v --cov=app/core/runtime --cov-report=term --cov-fail-under=65 -m "not live_llm"
+          python -m pytest tests/ -v --cov=app/core/runtime --cov=app/core/harness --cov-report=term --cov-fail-under=65 -m "not live_llm"
 
       - name: Verify database schema
         run: |

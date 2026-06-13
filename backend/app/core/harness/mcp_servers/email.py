@@ -64,19 +64,19 @@ def _extract_body(msg: email.message.Message, max_len: int = 300) -> str:
         for part in msg.walk():
             if part.get_content_type() == "text/plain":
                 payload = part.get_payload(decode=True)
-                if payload:
+                if isinstance(payload, bytes):
                     body += payload.decode("utf-8", errors="replace")
                     break
         if not body:
             for part in msg.walk():
                 if part.get_content_type() == "text/html":
                     payload = part.get_payload(decode=True)
-                    if payload:
+                    if isinstance(payload, bytes):
                         body = _strip_html(payload.decode("utf-8", errors="replace"))
                         break
     else:
         payload = msg.get_payload(decode=True)
-        if payload:
+        if isinstance(payload, bytes):
             raw = payload.decode("utf-8", errors="replace")
             body = _strip_html(raw) if "<" in raw and ">" in raw else raw
     return body[:max_len].strip()
@@ -127,7 +127,11 @@ class EmailServer:
                         body = _extract_body(msg, max_len=body_max)
                         date_raw = msg.get("Date")
                         try:
-                            ts = parsedate_to_datetime(date_raw).timestamp()
+                            ts = (
+                                parsedate_to_datetime(date_raw).timestamp()
+                                if date_raw
+                                else 0.0
+                            )
                         except Exception:
                             ts = 0.0
 
