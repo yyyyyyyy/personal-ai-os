@@ -354,8 +354,10 @@ class Brain:
         # Strip any leaked tool-call markup
         cleaned = strip_tool_markup(content)
 
-        # If the LLM produced only tool-call markup (stripped to empty), retry
-        # with an explicit instruction to NOT use any tool syntax.
+        # If the LLM produced only tool-call markup (stripped to empty), retry once
+        # with a minimal instruction.  IMPORTANT: do NOT name or describe any
+        # specific tool-call syntax in the instruction — DeepSeek will treat it as
+        # a continuation pattern and emit exactly what we're trying to suppress.
         if not cleaned.strip():
             original_raw = content[:200] if content else "(empty)"
             logger.warning(
@@ -365,11 +367,7 @@ class Brain:
             retry_messages = list(egress_messages)
             retry_messages.append({
                 "role": "user",
-                "content": (
-                    "请仅用自然语言继续回答，不要使用任何工具调用标记"
-                    "（如 <｜tool_calls>、<｜invoke> 等），"
-                    "也不要尝试调用任何工具。直接给出你的分析或建议。"
-                ),
+                "content": "请只用文字回复，不要调用任何工具。",
             })
             try:
                 response = await self.client.chat.completions.create(
@@ -380,6 +378,12 @@ class Brain:
                 )
                 content = response.choices[0].message.content or ""
                 cleaned = strip_tool_markup(content)
+                if not cleaned.strip():
+                    logger.warning(
+                        "continue_after_tool_result: retry also empty, raw=%r — giving up",
+                        content[:200],
+                    )
+                    cleaned = "操作已完成。如需继续，请告诉我下一步想做什么。"
             except Exception as e:
                 logger.exception("continue_after_tool_result retry failed")
                 cleaned = f"操作已完成，但无法生成后续回复：{e}"
