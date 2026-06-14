@@ -45,7 +45,7 @@ export function useDashboard() {
         getToolSummary(7),
         getMemoryStats(),
         getHealth(),
-        listNotifications(10).catch(() => [] as Notification[]),
+        listNotifications(10, true).catch(() => [] as Notification[]),
       ]);
 
       // Abort if a newer fetch superseded this one

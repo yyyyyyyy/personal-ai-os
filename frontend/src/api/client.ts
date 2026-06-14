@@ -96,4 +96,8 @@ export { listReviews, triggerMorningBrief } from "./reviews";
 export { listPendingApprovals, resolveApproval } from "./approvals";
 
 // Notifications
-export { listNotifications } from "./notifications";
+export {
+  listNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from "./notifications";

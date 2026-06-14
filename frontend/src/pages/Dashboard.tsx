@@ -91,7 +91,8 @@ export default function DashboardPage() {
     ? (((cost.total_calls - cost.failed_calls) / cost.total_calls) * 100).toFixed(1)
     : "100";
 
-  const mergedNotifications = [...liveNotifications, ...notifications].reduce<typeof notifications>(
+  const unreadNotifications = notifications.filter((n) => !n.read);
+  const mergedNotifications = [...liveNotifications, ...unreadNotifications].reduce<typeof notifications>(
     (acc, item) => {
       const key = `${item.type}:${item.title}`;
       if (!acc.some((n) => n.id === item.id || `${n.type}:${n.title}` === key)) {

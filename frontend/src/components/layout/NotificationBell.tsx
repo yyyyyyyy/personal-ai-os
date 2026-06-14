@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
-import { listNotifications, type Notification } from "../../api/client";
+import {
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type Notification,
+} from "../../api/client";
 
 export default function NotificationBell() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-
-  useEffect(() => {
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 60000);
-    return () => clearInterval(interval);
-  }, []);
 
   const loadNotifications = async () => {
     try {
@@ -23,10 +22,26 @@ export default function NotificationBell() {
     }
   };
 
-  const unread = notifications.filter((n) => n.read === 0 || n.read === undefined).length;
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
-  const handleClick = (n: Notification) => {
+  const unread = notifications.filter((n) => !n.read).length;
+
+  const handleClick = async (n: Notification) => {
     setOpen(false);
+    if (!n.read) {
+      try {
+        await markNotificationRead(n.id);
+        setNotifications((prev) =>
+          prev.map((item) => (item.id === n.id ? { ...item, read: 1 } : item)),
+        );
+      } catch {
+        // still navigate even if mark-read fails
+      }
+    }
     if (n.type === "goal_stagnant" || n.type.includes("goal")) {
       navigate("/goals");
     } else if (n.type.includes("brief") || n.type.includes("review")) {
@@ -35,6 +50,15 @@ export default function NotificationBell() {
       navigate("/inbox");
     } else {
       navigate("/dashboard");
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllNotificationsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: 1 })));
+    } catch {
+      // ignore
     }
   };
 
@@ -59,6 +83,18 @@ export default function NotificationBell() {
 
       {open && (
         <div className="absolute bottom-full left-2 right-2 mb-1 bg-gray-900 border border-gray-700 rounded-xl shadow-xl max-h-64 overflow-y-auto z-50">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800">
+            <span className="text-xs text-gray-500">最近通知</span>
+            {unread > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                className="text-xs text-emerald-400 hover:text-emerald-300"
+              >
+                全部已读
+              </button>
+            )}
+          </div>
           {notifications.length === 0 ? (
             <p className="text-xs text-gray-500 p-4 text-center">暂无通知</p>
           ) : (
@@ -66,9 +102,13 @@ export default function NotificationBell() {
               <button
                 key={n.id}
                 onClick={() => handleClick(n)}
-                className="w-full text-left p-3 hover:bg-gray-800 border-b border-gray-800 last:border-0"
+                className={`w-full text-left p-3 hover:bg-gray-800 border-b border-gray-800 last:border-0 ${
+                  n.read ? "opacity-60" : ""
+                }`}
               >
-                <p className="text-sm text-emerald-400">{n.title}</p>
+                <p className={`text-sm ${n.read ? "text-gray-400" : "text-emerald-400"}`}>
+                  {n.title}
+                </p>
                 <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                   {n.content}
                 </p>
