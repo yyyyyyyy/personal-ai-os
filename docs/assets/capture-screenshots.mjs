@@ -1,31 +1,40 @@
 #!/usr/bin/env node
 /**
- * Render docs/assets/mock/*.html to PNG screenshots for README.
- * Requires: npx playwright (chromium) — installed on first run.
+ * Capture real UI screenshots from the running Personal AI Runtime frontend.
+ * Requires: the frontend (http://localhost:5173) and backend to be running.
+ * Usage: node capture-screenshots.mjs
  */
 import { chromium } from "playwright";
 import { fileURLToPath } from "url";
 import path from "path";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const MOCK = path.join(ROOT, "mock");
+const BASE = "http://localhost:5173";
+const VIEWPORT = { width: 1440, height: 900 };
 
-const SHOTS = [
-  { html: "chat-approval.html", out: "chat-approval.png", width: 1280, height: 800 },
-  { html: "goals.html", out: "goals.png", width: 1280, height: 800 },
-  { html: "export.html", out: "export.png", width: 1280, height: 720 },
+// Pages to screenshot: [route, output filename, description]
+const PAGES = [
+  { route: "/",            out: "chat.png",          desc: "对话首页" },
+  { route: "/goals",       out: "goals.png",         desc: "目标管理" },
+  { route: "/inbox",       out: "inbox.png",         desc: "智能收件箱" },
+  { route: "/dashboard",   out: "dashboard.png",     desc: "仪表盘" },
+  { route: "/memories",    out: "memories.png",      desc: "记忆管理" },
 ];
 
-const browser = await chromium.launch();
-const page = await browser.newPage();
+const browser = await chromium.launch({ headless: true });
+const context = await browser.newContext({ viewport: VIEWPORT });
+const page = await context.newPage();
 
-for (const { html, out, width, height } of SHOTS) {
-  const file = path.join(MOCK, html);
+for (const { route, out, desc } of PAGES) {
+  const url = `${BASE}${route}`;
   const dest = path.join(ROOT, out);
-  await page.setViewportSize({ width, height });
-  await page.goto(`file://${file}`, { waitUntil: "networkidle" });
-  await page.screenshot({ path: dest, type: "png" });
-  console.log(`Wrote ${dest}`);
+  console.log(`📸 [${desc}] ${url} → ${out}`);
+  await page.goto(url, { waitUntil: "networkidle", timeout: 15000 });
+  // Give React a moment to fully render
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: dest, type: "png", fullPage: false });
+  console.log(`  ✓ Wrote ${dest}`);
 }
 
 await browser.close();
+console.log("\n✅ All screenshots captured.");
